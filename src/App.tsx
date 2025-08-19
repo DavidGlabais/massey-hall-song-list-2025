@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Music, Plus, Download, Upload, Save, Users, X, Trash2, Guitar, Mic, Search } from 'lucide-react';
+import { Music, Plus, Download, Upload, Save, Users, X, Trash2, Guitar, Mic, Search, Database, Cloud, CloudOff } from 'lucide-react';
+import { SongService } from './songService';
+import type { DatabaseSong } from './supabaseClient';
 
 // Define the Song type
 interface Song {
@@ -85,11 +87,108 @@ const SongDurationTracker = () => {
   });
 
   const [totalTime, setTotalTime] = useState({ minutes: 0, seconds: 0, songsWithTime: 0 });
+  const [isOnline, setIsOnline] = useState(true);
+  const [lastSynced, setLastSynced] = useState<Date | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   // Save to localStorage whenever songs change
   useEffect(() => {
     localStorage.setItem('song-tracker-playlist', JSON.stringify(songs));
   }, [songs]);
+
+  // Database sync functions
+  const loadFromDatabase = async () => {
+    setIsSyncing(true);
+    try {
+      const dbSongs = await SongService.getAllSongs();
+      if (dbSongs.length > 0) {
+        // Convert database songs to app format
+        const convertedSongs = dbSongs.map(dbSong => ({
+          id: dbSong.id,
+          title: dbSong.title,
+          duration: dbSong.duration,
+          interestedPlayers: [], // Keep for legacy compatibility
+          players: dbSong.players
+        }));
+        setSongs(convertedSongs);
+        setLastSynced(new Date());
+        setIsOnline(true);
+        console.log('✅ Loaded songs from database');
+      }
+    } catch (error) {
+      console.error('❌ Failed to load from database:', error);
+      setIsOnline(false);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const saveToDatabase = async () => {
+    setIsSyncing(true);
+    try {
+      // Convert app songs to database format
+      const dbSongs: DatabaseSong[] = songs.map(song => ({
+        id: song.id,
+        title: song.title,
+        duration: song.duration,
+        players: song.players || {
+          electricGuitar: [],
+          acousticGuitar: [],
+          bass: [],
+          vocals: [],
+          backupVocals: []
+        }
+      }));
+      
+      const success = await SongService.saveAllSongs(dbSongs);
+      if (success) {
+        setLastSynced(new Date());
+        setIsOnline(true);
+        console.log('✅ Saved songs to database');
+      } else {
+        setIsOnline(false);
+      }
+    } catch (error) {
+      console.error('❌ Failed to save to database:', error);
+      setIsOnline(false);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // Auto-save to database when songs change
+  useEffect(() => {
+    if (songs.length > 0) {
+      const timeoutId = setTimeout(() => {
+        saveToDatabase();
+      }, 2000); // Auto-save 2 seconds after changes
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [songs]);
+
+  // Load from database on component mount
+  useEffect(() => {
+    loadFromDatabase();
+    
+    // Set up real-time subscription
+    const subscription = SongService.subscribeToChanges((updatedSongs) => {
+      const convertedSongs = updatedSongs.map(dbSong => ({
+        id: dbSong.id,
+        title: dbSong.title,
+        duration: dbSong.duration,
+        interestedPlayers: [],
+        players: dbSong.players
+      }));
+      setSongs(convertedSongs);
+      setLastSynced(new Date());
+      console.log('🔄 Real-time update received');
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
 
   // Fix common data issues in localStorage
   const fixDataIssues = () => {
@@ -406,10 +505,38 @@ const SongDurationTracker = () => {
         </div>
         
         <div className="flex items-center justify-between mb-4">
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <div className="text-sm text-blue-600 font-medium">Total Playlist Time</div>
-            <div className="text-2xl font-bold text-blue-900">{formatTotalTime()}</div>
-            <div className="text-sm text-blue-600">{totalTime.songsWithTime} of {songs.length} songs timed</div>
+          <div className="flex gap-4">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="text-sm text-blue-600 font-medium">Total Playlist Time</div>
+              <div className="text-2xl font-bold text-blue-900">{formatTotalTime()}</div>
+              <div className="text-sm text-blue-600">{totalTime.songsWithTime} of {songs.length} songs timed</div>
+            </div>
+            
+            <div className={`border rounded-lg p-4 ${isOnline ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+              <div className="flex items-center gap-2 text-sm font-medium">
+                {isSyncing ? (
+                  <>
+                    <div className="animate-spin w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full"></div>
+                    <span className="text-blue-600">Syncing...</span>
+                  </>
+                ) : isOnline ? (
+                  <>
+                    <Cloud className="w-4 h-4 text-green-600" />
+                    <span className="text-green-600">Online</span>
+                  </>
+                ) : (
+                  <>
+                    <CloudOff className="w-4 h-4 text-red-600" />
+                    <span className="text-red-600">Offline</span>
+                  </>
+                )}
+              </div>
+              {lastSynced && (
+                <div className="text-xs text-gray-500 mt-1">
+                  Last synced: {lastSynced.toLocaleTimeString()}
+                </div>
+              )}
+            </div>
           </div>
           
           <div className="flex gap-2">
@@ -421,25 +548,12 @@ const SongDurationTracker = () => {
               Add Song
             </button>
             <button
-              onClick={smartMigrationTo24Songs}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              onClick={loadFromDatabase}
+              disabled={isSyncing}
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
             >
-              <Plus className="w-4 h-4" />
-              Safe Migrate to 24
-            </button>
-            <button
-              onClick={debugDurations}
-              className="flex items-center gap-2 px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors"
-            >
-              <Search className="w-4 h-4" />
-              Debug Durations
-            </button>
-            <button
-              onClick={fixDataIssues}
-              className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-            >
-              <X className="w-4 h-4" />
-              Fix Data Issues
+              <Database className="w-4 h-4" />
+              Sync Now
             </button>
             <button
               onClick={exportToCSV}
