@@ -402,7 +402,7 @@ const SongDurationTracker = () => {
       <div className="mb-6">
         <div className="flex items-center gap-3 mb-4">
           <Music className="w-8 h-8 text-blue-600" />
-          <h1 className="text-3xl font-bold text-gray-900">Song Duration Tracker</h1>
+          <h1 className="text-3xl font-bold text-gray-900">Massey Hall Song List November 15 2025</h1>
         </div>
         
         <div className="flex items-center justify-between mb-4">
