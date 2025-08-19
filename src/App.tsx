@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Music, Plus, Download, Upload, Save, Users, X, Trash2, Guitar, Mic, Search, Database, Cloud, CloudOff } from 'lucide-react';
 import { SongService } from './songService';
+import { supabase } from './supabaseClient';
 import type { DatabaseSong } from './supabaseClient';
 
 // Define the Song type
@@ -189,6 +190,51 @@ const SongDurationTracker = () => {
       subscription.unsubscribe();
     };
   }, []);
+
+  // Fix database duplicates
+  const fixDatabaseDuplicates = async () => {
+    try {
+      const { data: allSongs, error } = await supabase
+        .from('songs')
+        .select('*')
+        .order('id');
+      
+      if (error) throw error;
+      
+      console.log('All songs in database:');
+      allSongs?.forEach((song: DatabaseSong) => {
+        console.log(`ID: ${song.id}, Title: "${song.title}"`);
+      });
+      
+      // Look specifically for the problematic duplicate
+      const sultansSongs = allSongs?.filter(song => 
+        song.title.toLowerCase().includes('sultans of swing')
+      );
+      
+      console.log('Sultans of Swing songs found:', sultansSongs);
+      
+      if (sultansSongs && sultansSongs.length > 1) {
+        // Find the one that's just "Sultans of Swing" without artist
+        const duplicateToDelete = sultansSongs.find(song => 
+          song.title.trim() === "Sultans of Swing"
+        );
+        
+        if (duplicateToDelete) {
+          console.log(`Deleting duplicate: "${duplicateToDelete.title}" (ID: ${duplicateToDelete.id})`);
+          await supabase.from('songs').delete().eq('id', duplicateToDelete.id);
+          console.log('Duplicate deleted successfully');
+          await loadFromDatabase(); // Refresh
+        } else {
+          console.log('No exact "Sultans of Swing" duplicate found to delete');
+        }
+      } else {
+        console.log('No Sultans of Swing duplicates found');
+      }
+      
+    } catch (error) {
+      console.error('Error fixing database duplicates:', error);
+    }
+  };
 
   // Fix common data issues in localStorage
   const fixDataIssues = () => {
@@ -597,7 +643,7 @@ const SongDurationTracker = () => {
             {songs.map((song: Song, index: number) => (
               <tr key={song.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                  {song.id}
+                  {index + 1}
                 </td>
                 <td className="px-4 py-3">
                   <div className="space-y-2">
