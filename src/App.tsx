@@ -918,7 +918,7 @@ const SongDurationTracker = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-      <div className="max-w-6xl mx-auto p-6">
+      <div className="max-w-6xl mx-auto p-3 sm:p-4 lg:p-6">
         {/* Non-blocking notification */}
         {notification && (
           <Notification
@@ -928,38 +928,40 @@ const SongDurationTracker = () => {
           />
         )}
         
-        <div className="mb-8">
-          <div className="flex items-center gap-4 mb-6">
-            <div className="p-3 bg-gradient-to-r from-amber-500 to-orange-500 rounded-xl shadow-lg">
-              <Music className="w-8 h-8 text-white" />
+        <div className="mb-6 lg:mb-8">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 mb-4 sm:mb-6">
+            <div className="p-2 sm:p-3 bg-gradient-to-r from-amber-500 to-orange-500 rounded-xl shadow-lg">
+              <Music className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
             </div>
-            <h1 className="text-3xl font-bold text-white tracking-tight">Massey Hall Song List</h1>
-            <span className="text-lg text-amber-400 font-medium">November 15, 2025</span>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+              <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">Massey Hall Song List</h1>
+              <span className="text-sm sm:text-lg text-amber-400 font-medium">November 15, 2025</span>
+            </div>
           </div>
           
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex gap-6">
-              <div className="bg-slate-800/80 backdrop-blur border border-slate-600 rounded-xl p-5 shadow-xl">
-                <div className="text-sm text-amber-400 font-semibold mb-1">Total Playlist Time</div>
-                <div className="text-2xl font-bold text-white">{formatTotalTime()}</div>
-                <div className="text-sm text-slate-300">{totalTime.songsWithTime} of {songs.length} songs timed</div>
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-4 sm:mb-6 gap-4 lg:gap-0">
+            <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
+              <div className="bg-slate-800/80 backdrop-blur border border-slate-600 rounded-xl p-4 sm:p-5 shadow-xl">
+                <div className="text-xs sm:text-sm text-amber-400 font-semibold mb-1">Total Playlist Time</div>
+                <div className="text-xl sm:text-2xl font-bold text-white">{formatTotalTime()}</div>
+                <div className="text-xs sm:text-sm text-slate-300">{totalTime.songsWithTime} of {songs.length} songs timed</div>
               </div>
               
-              <div className={`border rounded-xl p-5 shadow-xl backdrop-blur ${isOnline ? 'bg-emerald-900/80 border-emerald-600' : 'bg-red-900/80 border-red-600'}`}>
-                <div className="flex items-center gap-2 text-sm font-semibold">
+              <div className={`border rounded-xl p-4 sm:p-5 shadow-xl backdrop-blur ${isOnline ? 'bg-emerald-900/80 border-emerald-600' : 'bg-red-900/80 border-red-600'}`}>
+                <div className="flex items-center gap-2 text-xs sm:text-sm font-semibold">
                   {isSyncing ? (
                     <>
-                      <div className="animate-spin w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full"></div>
+                      <div className="animate-spin w-3 h-3 sm:w-4 sm:h-4 border-2 border-amber-400 border-t-transparent rounded-full"></div>
                       <span className="text-amber-400">Syncing...</span>
                     </>
                   ) : isOnline ? (
                     <>
-                      <Cloud className="w-4 h-4 text-emerald-400" />
+                      <Cloud className="w-3 h-3 sm:w-4 sm:h-4 text-emerald-400" />
                       <span className="text-emerald-400">Online</span>
                     </>
                   ) : (
                     <>
-                      <CloudOff className="w-4 h-4 text-red-400" />
+                      <CloudOff className="w-3 h-3 sm:w-4 sm:h-4 text-red-400" />
                       <span className="text-red-400">Offline</span>
                     </>
                   )}
@@ -972,263 +974,495 @@ const SongDurationTracker = () => {
               </div>
             </div>
             
-            <div className="flex gap-3">
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
               {/* Primary Controls */}
               <button
                 onClick={addSong}
-                className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-emerald-600 to-emerald-700 text-white rounded-xl hover:from-emerald-700 hover:to-emerald-800 transition-all duration-200 shadow-lg hover:shadow-xl font-medium border border-emerald-500"
+                className="flex items-center justify-center gap-2 px-4 sm:px-5 py-2 sm:py-3 bg-gradient-to-r from-emerald-600 to-emerald-700 text-white rounded-xl hover:from-emerald-700 hover:to-emerald-800 transition-all duration-200 shadow-lg hover:shadow-xl font-medium border border-emerald-500 text-sm sm:text-base"
               >
-                <Plus className="w-4 h-4" />
+                <Plus className="w-3 h-3 sm:w-4 sm:h-4" />
                 Add Song
               </button>
               <button
                 onClick={loadFromDatabase}
                 disabled={isSyncing}
-                className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-amber-600 to-orange-600 text-white rounded-xl hover:from-amber-700 hover:to-orange-700 transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed font-medium border border-amber-500"
+                className="flex items-center justify-center gap-2 px-4 sm:px-5 py-2 sm:py-3 bg-gradient-to-r from-amber-600 to-orange-600 text-white rounded-xl hover:from-amber-700 hover:to-orange-700 transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed font-medium border border-amber-500 text-sm sm:text-base"
               >
-                <Database className="w-4 h-4" />
+                <Database className="w-3 h-3 sm:w-4 sm:h-4" />
                 Sync Now
               </button>
               <button
                 onClick={exportToCSV}
                 title="Export to Google Sheets, Excel, or print"
-                className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-slate-600 to-slate-700 text-white rounded-xl hover:from-slate-700 hover:to-slate-800 transition-all duration-200 shadow-lg hover:shadow-xl font-medium border border-slate-500"
+                className="flex items-center justify-center gap-2 px-4 sm:px-5 py-2 sm:py-3 bg-gradient-to-r from-slate-600 to-slate-700 text-white rounded-xl hover:from-slate-700 hover:to-slate-800 transition-all duration-200 shadow-lg hover:shadow-xl font-medium border border-slate-500 text-sm sm:text-base"
               >
-                <Download className="w-4 h-4" />
-                Export CSV
+                <Download className="w-3 h-3 sm:w-4 sm:h-4" />
+                <span className="hidden sm:inline">Export CSV</span>
+                <span className="sm:hidden">Export</span>
               </button>
             </div>
           </div>
         </div>
         <div className="bg-slate-800/80 backdrop-blur border border-slate-600 rounded-2xl overflow-hidden shadow-2xl">
-          <table className="w-full">
-            <thead className="bg-slate-700/90">
-              <tr>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-amber-400 w-20">Song #</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-amber-400">Title & Players</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-amber-400 w-32">Duration (M:SS)</th>
-                <th className="px-6 py-4 text-center text-sm font-semibold text-amber-400 w-20">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-600">
-              {songs.map((song: Song, index: number) => (
-                <tr key={song.id} className="hover:bg-slate-700/50 transition-colors duration-150">
-                  <td className="px-6 py-4 text-sm font-semibold text-slate-200">
-                    {index + 1}
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="space-y-3">
-                      {/* Song title input */}
-                      <input
-                        type="text"
-                        value={song.title}
-                        onChange={(e) => updateSong(song.id, 'title', e.target.value)}
-                        className="w-full p-3 text-sm bg-slate-700/50 border border-slate-600 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-white placeholder-slate-400 font-medium"
-                        placeholder="Enter song title..."
-                      />
-                      
-                      {/* Players section - Sophisticated monochromatic design */}
-                      <div className="space-y-3 mt-3">
-                        <div className="text-xs font-semibold text-amber-400 mb-3">Band Members by Instrument:</div>
+          {/* Mobile-first table design */}
+          <div className="hidden lg:block">
+            <table className="w-full">
+              <thead className="bg-slate-700/90">
+                <tr>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-amber-400 w-20">Song #</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-amber-400">Title & Players</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-amber-400 w-32">Duration (M:SS)</th>
+                  <th className="px-6 py-4 text-center text-sm font-semibold text-amber-400 w-20">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-600">
+                {songs.map((song: Song, index: number) => (
+                  <tr key={song.id} className="hover:bg-slate-700/50 transition-colors duration-150">
+                    <td className="px-6 py-4 text-sm font-semibold text-slate-200">
+                      {index + 1}
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="space-y-3">
+                        {/* Song title input */}
+                        <input
+                          type="text"
+                          value={song.title}
+                          onChange={(e) => updateSong(song.id, 'title', e.target.value)}
+                          className="w-full p-3 text-sm bg-slate-700/50 border border-slate-600 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-white placeholder-slate-400 font-medium"
+                          placeholder="Enter song title..."
+                        />
                         
-                        {/* Electric Guitar */}
-                        <div className="flex items-center gap-3 p-3 bg-slate-700/60 border border-slate-600 rounded-lg">
-                          <Guitar className="w-4 h-4 text-red-400 flex-shrink-0" />
-                          <span className="text-xs font-semibold text-red-300 min-w-[80px]">Electric:</span>
-                          <div className="flex flex-wrap gap-2 flex-1">
-                            {song.players?.electricGuitar?.map((player, playerIndex) => (
-                              <span key={playerIndex} className="inline-flex items-center gap-1 px-3 py-1 bg-red-900/40 text-red-200 text-xs rounded-full font-medium border border-red-700/50">
-                                {player}
-                                <button 
-                                  onClick={() => removePlayerFromInstrument(song.id, 'electricGuitar', player)}
-                                  className="text-red-400 hover:text-red-200 transition-colors"
-                                  title="Remove player"
-                                >
-                                  <X className="w-3 h-3" />
-                                </button>
-                              </span>
-                            ))}
-                            <button 
-                              onClick={() => {
-                                const name = prompt('Enter player name for Electric Guitar:');
-                                if (name) addPlayerToInstrument(song.id, 'electricGuitar', name);
-                              }}
-                              className="px-3 py-1 text-red-400 hover:bg-red-900/40 text-xs rounded-full border border-red-700/50 hover:border-red-600 transition-colors font-medium"
-                            >
-                              + Add
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Acoustic Guitar */}
-                        <div className="flex items-center gap-3 p-3 bg-slate-700/60 border border-slate-600 rounded-lg">
-                          <Guitar className="w-4 h-4 text-amber-400 flex-shrink-0" />
-                          <span className="text-xs font-semibold text-amber-300 min-w-[80px]">Acoustic:</span>
-                          <div className="flex flex-wrap gap-2 flex-1">
-                            {song.players?.acousticGuitar?.map((player, playerIndex) => (
-                              <span key={playerIndex} className="inline-flex items-center gap-1 px-3 py-1 bg-amber-900/40 text-amber-200 text-xs rounded-full font-medium border border-amber-700/50">
-                                {player}
-                                <button 
-                                  onClick={() => removePlayerFromInstrument(song.id, 'acousticGuitar', player)}
-                                  className="text-amber-400 hover:text-amber-200 transition-colors"
-                                  title="Remove player"
-                                >
-                                  <X className="w-3 h-3" />
-                                </button>
-                              </span>
-                            ))}
-                            <button 
-                              onClick={() => {
-                                const name = prompt('Enter player name for Acoustic Guitar:');
-                                if (name) addPlayerToInstrument(song.id, 'acousticGuitar', name);
-                              }}
-                              className="px-3 py-1 text-amber-400 hover:bg-amber-900/40 text-xs rounded-full border border-amber-700/50 hover:border-amber-600 transition-colors font-medium"
-                            >
-                              + Add
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Bass */}
-                        <div className="flex items-center gap-3 p-3 bg-slate-700/60 border border-slate-600 rounded-lg">
-                          <Guitar className="w-4 h-4 text-purple-400 flex-shrink-0" />
-                          <span className="text-xs font-semibold text-purple-300 min-w-[80px]">Bass:</span>
-                          <div className="flex flex-wrap gap-2 flex-1">
-                            {song.players?.bass?.map((player, playerIndex) => (
-                              <span key={playerIndex} className="inline-flex items-center gap-1 px-3 py-1 bg-purple-900/40 text-purple-200 text-xs rounded-full font-medium border border-purple-700/50">
-                                {player}
-                                <button 
-                                  onClick={() => removePlayerFromInstrument(song.id, 'bass', player)}
-                                  className="text-purple-400 hover:text-purple-200 transition-colors"
-                                  title="Remove player"
-                                >
-                                  <X className="w-3 h-3" />
-                                </button>
-                              </span>
-                            ))}
-                            <button 
-                              onClick={() => {
-                                const name = prompt('Enter player name for Bass:');
-                                if (name) addPlayerToInstrument(song.id, 'bass', name);
-                              }}
-                              className="px-3 py-1 text-purple-400 hover:bg-purple-900/40 text-xs rounded-full border border-purple-700/50 hover:border-purple-600 transition-colors font-medium"
-                            >
-                              + Add
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Vocals */}
-                        <div className="flex items-center gap-3 p-3 bg-slate-700/60 border border-slate-600 rounded-lg">
-                          <Mic className="w-4 h-4 text-blue-400 flex-shrink-0" />
-                          <span className="text-xs font-semibold text-blue-300 min-w-[80px]">Vocals:</span>
-                          <div className="flex flex-wrap gap-2 flex-1">
-                            {song.players?.vocals?.map((player, playerIndex) => (
-                              <span key={playerIndex} className="inline-flex items-center gap-1 px-3 py-1 bg-blue-900/40 text-blue-200 text-xs rounded-full font-medium border border-blue-700/50">
-                                {player}
-                                <button 
-                                  onClick={() => removePlayerFromInstrument(song.id, 'vocals', player)}
-                                  className="text-blue-400 hover:text-blue-200 transition-colors"
-                                  title="Remove player"
-                                >
-                                  <X className="w-3 h-3" />
-                                </button>
-                              </span>
-                            ))}
-                            <button 
-                              onClick={() => {
-                                const name = prompt('Enter player name for Vocals:');
-                                if (name) addPlayerToInstrument(song.id, 'vocals', name);
-                              }}
-                              className="px-3 py-1 text-blue-400 hover:bg-blue-900/40 text-xs rounded-full border border-blue-700/50 hover:border-blue-600 transition-colors font-medium"
-                            >
-                              + Add
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Backup Vocals */}
-                        <div className="flex items-center gap-3 p-3 bg-slate-700/60 border border-slate-600 rounded-lg">
-                          <Mic className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                          <span className="text-xs font-semibold text-emerald-300 min-w-[80px]">Backup:</span>
-                          <div className="flex flex-wrap gap-2 flex-1">
-                            {song.players?.backupVocals?.map((player, playerIndex) => (
-                              <span key={playerIndex} className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-900/40 text-emerald-200 text-xs rounded-full font-medium border border-emerald-700/50">
-                                {player}
-                                <button 
-                                  onClick={() => removePlayerFromInstrument(song.id, 'backupVocals', player)}
-                                  className="text-emerald-400 hover:text-emerald-200 transition-colors"
-                                  title="Remove player"
-                                >
-                                  <X className="w-3 h-3" />
-                                </button>
-                              </span>
-                            ))}
-                            <button 
-                              onClick={() => {
-                                const name = prompt('Enter player name for Backup Vocals:');
-                                if (name) addPlayerToInstrument(song.id, 'backupVocals', name);
-                              }}
-                              className="px-3 py-1 text-emerald-400 hover:bg-emerald-900/40 text-xs rounded-full border border-emerald-700/50 hover:border-emerald-600 transition-colors font-medium"
-                            >
-                              + Add
-                            </button>
-                          </div>
-                        </div>
-
-                      {/* Old system data preservation */}
-                      {song.interestedPlayers.length > 0 && (
-                        <div className="mt-3 p-3 bg-slate-700/40 border border-slate-600 rounded-lg">
-                          <div className="text-xs font-medium text-slate-400 mb-2">Legacy Interest List:</div>
-                          <div className="flex flex-wrap gap-2">
-                            {song.interestedPlayers.map((player, playerIndex) => (
-                              <span
-                                key={playerIndex}
-                                className="inline-flex items-center gap-1 px-3 py-1 bg-slate-600/60 text-slate-300 text-xs rounded-full border border-slate-500"
+                        {/* Players section - Sophisticated monochromatic design */}
+                        <div className="space-y-3 mt-3">
+                          <div className="text-xs font-semibold text-amber-400 mb-3">Band Members by Instrument:</div>
+                          
+                          {/* Electric Guitar */}
+                          <div className="flex items-center gap-3 p-3 bg-slate-700/60 border border-slate-600 rounded-lg">
+                            <Guitar className="w-4 h-4 text-red-400 flex-shrink-0" />
+                            <span className="text-xs font-semibold text-red-300 min-w-[80px]">Electric:</span>
+                            <div className="flex flex-wrap gap-2 flex-1">
+                              {song.players?.electricGuitar?.map((player, playerIndex) => (
+                                <span key={playerIndex} className="inline-flex items-center gap-1 px-3 py-1 bg-red-900/40 text-red-200 text-xs rounded-full font-medium border border-red-700/50">
+                                  {player}
+                                  <button 
+                                    onClick={() => removePlayerFromInstrument(song.id, 'electricGuitar', player)}
+                                    className="text-red-400 hover:text-red-200 transition-colors"
+                                    title="Remove player"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </span>
+                              ))}
+                              <button 
+                                onClick={() => {
+                                  const name = prompt('Enter player name for Electric Guitar:');
+                                  if (name) addPlayerToInstrument(song.id, 'electricGuitar', name);
+                                }}
+                                className="px-3 py-1 text-red-400 hover:bg-red-900/40 text-xs rounded-full border border-red-700/50 hover:border-red-600 transition-colors font-medium"
                               >
-                                <Users className="w-3 h-3" />
-                                {player}
-                                <button
-                                  onClick={() => removePlayerFromSong(song.id, player)}
-                                  className="text-slate-400 hover:text-slate-200"
-                                  title="Remove player"
+                                + Add
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Acoustic Guitar */}
+                          <div className="flex items-center gap-3 p-3 bg-slate-700/60 border border-slate-600 rounded-lg">
+                            <Guitar className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                            <span className="text-xs font-semibold text-amber-300 min-w-[80px]">Acoustic:</span>
+                            <div className="flex flex-wrap gap-2 flex-1">
+                              {song.players?.acousticGuitar?.map((player, playerIndex) => (
+                                <span key={playerIndex} className="inline-flex items-center gap-1 px-3 py-1 bg-amber-900/40 text-amber-200 text-xs rounded-full font-medium border border-amber-700/50">
+                                  {player}
+                                  <button 
+                                    onClick={() => removePlayerFromInstrument(song.id, 'acousticGuitar', player)}
+                                    className="text-amber-400 hover:text-amber-200 transition-colors"
+                                    title="Remove player"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </span>
+                              ))}
+                              <button 
+                                onClick={() => {
+                                  const name = prompt('Enter player name for Acoustic Guitar:');
+                                  if (name) addPlayerToInstrument(song.id, 'acousticGuitar', name);
+                                }}
+                                className="px-3 py-1 text-amber-400 hover:bg-amber-900/40 text-xs rounded-full border border-amber-700/50 hover:border-amber-600 transition-colors font-medium"
+                              >
+                                + Add
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Bass */}
+                          <div className="flex items-center gap-3 p-3 bg-slate-700/60 border border-slate-600 rounded-lg">
+                            <Guitar className="w-4 h-4 text-purple-400 flex-shrink-0" />
+                            <span className="text-xs font-semibold text-purple-300 min-w-[80px]">Bass:</span>
+                            <div className="flex flex-wrap gap-2 flex-1">
+                              {song.players?.bass?.map((player, playerIndex) => (
+                                <span key={playerIndex} className="inline-flex items-center gap-1 px-3 py-1 bg-purple-900/40 text-purple-200 text-xs rounded-full font-medium border border-purple-700/50">
+                                  {player}
+                                  <button 
+                                    onClick={() => removePlayerFromInstrument(song.id, 'bass', player)}
+                                    className="text-purple-400 hover:text-purple-200 transition-colors"
+                                    title="Remove player"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </span>
+                              ))}
+                              <button 
+                                onClick={() => {
+                                  const name = prompt('Enter player name for Bass:');
+                                  if (name) addPlayerToInstrument(song.id, 'bass', name);
+                                }}
+                                className="px-3 py-1 text-purple-400 hover:bg-purple-900/40 text-xs rounded-full border border-purple-700/50 hover:border-purple-600 transition-colors font-medium"
+                              >
+                                + Add
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Vocals */}
+                          <div className="flex items-center gap-3 p-3 bg-slate-700/60 border border-slate-600 rounded-lg">
+                            <Mic className="w-4 h-4 text-blue-400 flex-shrink-0" />
+                            <span className="text-xs font-semibold text-blue-300 min-w-[80px]">Vocals:</span>
+                            <div className="flex flex-wrap gap-2 flex-1">
+                              {song.players?.vocals?.map((player, playerIndex) => (
+                                <span key={playerIndex} className="inline-flex items-center gap-1 px-3 py-1 bg-blue-900/40 text-blue-200 text-xs rounded-full font-medium border border-blue-700/50">
+                                  {player}
+                                  <button 
+                                    onClick={() => removePlayerFromInstrument(song.id, 'vocals', player)}
+                                    className="text-blue-400 hover:text-blue-200 transition-colors"
+                                    title="Remove player"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </span>
+                              ))}
+                              <button 
+                                onClick={() => {
+                                  const name = prompt('Enter player name for Vocals:');
+                                  if (name) addPlayerToInstrument(song.id, 'vocals', name);
+                                }}
+                                className="px-3 py-1 text-blue-400 hover:bg-blue-900/40 text-xs rounded-full border border-blue-700/50 hover:border-blue-600 transition-colors font-medium"
+                              >
+                                + Add
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Backup Vocals */}
+                          <div className="flex items-center gap-3 p-3 bg-slate-700/60 border border-slate-600 rounded-lg">
+                            <Mic className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                            <span className="text-xs font-semibold text-emerald-300 min-w-[80px]">Backup:</span>
+                            <div className="flex flex-wrap gap-2 flex-1">
+                              {song.players?.backupVocals?.map((player, playerIndex) => (
+                                <span key={playerIndex} className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-900/40 text-emerald-200 text-xs rounded-full font-medium border border-emerald-700/50">
+                                  {player}
+                                  <button 
+                                    onClick={() => removePlayerFromInstrument(song.id, 'backupVocals', player)}
+                                    className="text-emerald-400 hover:text-emerald-200 transition-colors"
+                                    title="Remove player"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </span>
+                              ))}
+                              <button 
+                                onClick={() => {
+                                  const name = prompt('Enter player name for Backup Vocals:');
+                                  if (name) addPlayerToInstrument(song.id, 'backupVocals', name);
+                                }}
+                                className="px-3 py-1 text-emerald-400 hover:bg-emerald-900/40 text-xs rounded-full border border-emerald-700/50 hover:border-emerald-600 transition-colors font-medium"
+                              >
+                                + Add
+                              </button>
+                            </div>
+                          </div>
+
+                        {/* Old system data preservation */}
+                        {song.interestedPlayers.length > 0 && (
+                          <div className="mt-3 p-3 bg-slate-700/40 border border-slate-600 rounded-lg">
+                            <div className="text-xs font-medium text-slate-400 mb-2">Legacy Interest List:</div>
+                            <div className="flex flex-wrap gap-2">
+                              {song.interestedPlayers.map((player, playerIndex) => (
+                                <span
+                                  key={playerIndex}
+                                  className="inline-flex items-center gap-1 px-3 py-1 bg-slate-600/60 text-slate-300 text-xs rounded-full border border-slate-500"
                                 >
-                                  <X className="w-3 h-3" />
-                                </button>
-                              </span>
-                            ))}
+                                  <Users className="w-3 h-3" />
+                                  {player}
+                                  <button
+                                    onClick={() => removePlayerFromSong(song.id, player)}
+                                    className="text-slate-400 hover:text-slate-200"
+                                    title="Remove player"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </span>
+                              ))}
+                            </div>
+                            <div className="text-xs text-slate-500 mt-2">
+                              ↑ These can be moved to specific instruments
+                            </div>
                           </div>
-                          <div className="text-xs text-slate-500 mt-2">
-                            ↑ These can be moved to specific instruments
-                          </div>
-                        </div>
-                      )}
+                        )}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <input
+                      type="text"
+                      value={song.duration}
+                      onChange={(e) => updateSong(song.id, 'duration', e.target.value)}
+                      className="w-full p-2 text-sm bg-slate-700/50 border border-slate-600 rounded focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-white placeholder-slate-400"
+                      placeholder="4:35"
+                      pattern="[0-9]+:[0-5][0-9]"
+                    />
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <button
+                      onClick={() => deleteSong(song.id)}
+                      className="p-2 text-red-400 hover:text-red-300 hover:bg-red-900/40 rounded-lg transition-colors"
+                      title="Delete song"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        
+        {/* Mobile card layout */}
+        <div className="lg:hidden space-y-4">
+          {songs.map((song: Song, index: number) => (
+            <div key={song.id} className="bg-slate-700/60 border border-slate-600 rounded-xl p-4 shadow-lg">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm font-semibold text-amber-400">Song #{index + 1}</span>
+                <button
+                  onClick={() => deleteSong(song.id)}
+                  className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-900/40 rounded-lg transition-colors"
+                  title="Delete song"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+              
+              {/* Song title */}
+              <input
+                type="text"
+                value={song.title}
+                onChange={(e) => updateSong(song.id, 'title', e.target.value)}
+                className="w-full p-3 text-sm bg-slate-700/50 border border-slate-600 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-white placeholder-slate-400 font-medium mb-3"
+                placeholder="Enter song title..."
+              />
+              
+              {/* Duration */}
+              <div className="mb-4">
+                <label className="block text-xs font-semibold text-amber-400 mb-1">Duration (M:SS)</label>
+                <input
+                  type="text"
+                  value={song.duration}
+                  onChange={(e) => updateSong(song.id, 'duration', e.target.value)}
+                  className="w-full p-2 text-sm bg-slate-700/50 border border-slate-600 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-white placeholder-slate-400"
+                  placeholder="4:35"
+                  pattern="[0-9]+:[0-5][0-9]"
+                />
+              </div>
+              
+              {/* Players section - Mobile optimized */}
+              <div className="space-y-3">
+                <div className="text-xs font-semibold text-amber-400">Band Members by Instrument:</div>
+                
+                {/* Electric Guitar - Mobile */}
+                <div className="bg-slate-700/60 border border-slate-600 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Guitar className="w-4 h-4 text-red-400" />
+                    <span className="text-xs font-semibold text-red-300">Electric Guitar:</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {song.players?.electricGuitar?.map((player, playerIndex) => (
+                      <span key={playerIndex} className="inline-flex items-center gap-1 px-3 py-1 bg-red-900/40 text-red-200 text-xs rounded-full font-medium border border-red-700/50">
+                        {player}
+                        <button 
+                          onClick={() => removePlayerFromInstrument(song.id, 'electricGuitar', player)}
+                          className="text-red-400 hover:text-red-200 transition-colors"
+                          title="Remove player"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                    <button 
+                      onClick={() => {
+                        const name = prompt('Enter player name for Electric Guitar:');
+                        if (name) addPlayerToInstrument(song.id, 'electricGuitar', name);
+                      }}
+                      className="px-3 py-1 text-red-400 hover:bg-red-900/40 text-xs rounded-full border border-red-700/50 hover:border-red-600 transition-colors font-medium"
+                    >
+                      + Add
+                    </button>
+                  </div>
+                </div>
+
+                {/* Acoustic Guitar - Mobile */}
+                <div className="bg-slate-700/60 border border-slate-600 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Guitar className="w-4 h-4 text-amber-400" />
+                    <span className="text-xs font-semibold text-amber-300">Acoustic Guitar:</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {song.players?.acousticGuitar?.map((player, playerIndex) => (
+                      <span key={playerIndex} className="inline-flex items-center gap-1 px-3 py-1 bg-amber-900/40 text-amber-200 text-xs rounded-full font-medium border border-amber-700/50">
+                        {player}
+                        <button 
+                          onClick={() => removePlayerFromInstrument(song.id, 'acousticGuitar', player)}
+                          className="text-amber-400 hover:text-amber-200 transition-colors"
+                          title="Remove player"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                    <button 
+                      onClick={() => {
+                        const name = prompt('Enter player name for Acoustic Guitar:');
+                        if (name) addPlayerToInstrument(song.id, 'acousticGuitar', name);
+                      }}
+                      className="px-3 py-1 text-amber-400 hover:bg-amber-900/40 text-xs rounded-full border border-amber-700/50 hover:border-amber-600 transition-colors font-medium"
+                    >
+                      + Add
+                    </button>
+                  </div>
+                </div>
+
+                {/* Bass - Mobile */}
+                <div className="bg-slate-700/60 border border-slate-600 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Guitar className="w-4 h-4 text-purple-400" />
+                    <span className="text-xs font-semibold text-purple-300">Bass:</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {song.players?.bass?.map((player, playerIndex) => (
+                      <span key={playerIndex} className="inline-flex items-center gap-1 px-3 py-1 bg-purple-900/40 text-purple-200 text-xs rounded-full font-medium border border-purple-700/50">
+                        {player}
+                        <button 
+                          onClick={() => removePlayerFromInstrument(song.id, 'bass', player)}
+                          className="text-purple-400 hover:text-purple-200 transition-colors"
+                          title="Remove player"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                    <button 
+                      onClick={() => {
+                        const name = prompt('Enter player name for Bass:');
+                        if (name) addPlayerToInstrument(song.id, 'bass', name);
+                      }}
+                      className="px-3 py-1 text-purple-400 hover:bg-purple-900/40 text-xs rounded-full border border-purple-700/50 hover:border-purple-600 transition-colors font-medium"
+                    >
+                      + Add
+                    </button>
+                  </div>
+                </div>
+
+                {/* Vocals - Mobile */}
+                <div className="bg-slate-700/60 border border-slate-600 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Mic className="w-4 h-4 text-blue-400" />
+                    <span className="text-xs font-semibold text-blue-300">Lead Vocals:</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {song.players?.vocals?.map((player, playerIndex) => (
+                      <span key={playerIndex} className="inline-flex items-center gap-1 px-3 py-1 bg-blue-900/40 text-blue-200 text-xs rounded-full font-medium border border-blue-700/50">
+                        {player}
+                        <button 
+                          onClick={() => removePlayerFromInstrument(song.id, 'vocals', player)}
+                          className="text-blue-400 hover:text-blue-200 transition-colors"
+                          title="Remove player"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                    <button 
+                      onClick={() => {
+                        const name = prompt('Enter player name for Vocals:');
+                        if (name) addPlayerToInstrument(song.id, 'vocals', name);
+                      }}
+                      className="px-3 py-1 text-blue-400 hover:bg-blue-900/40 text-xs rounded-full border border-blue-700/50 hover:border-blue-600 transition-colors font-medium"
+                    >
+                      + Add
+                    </button>
+                  </div>
+                </div>
+
+                {/* Backup Vocals - Mobile */}
+                <div className="bg-slate-700/60 border border-slate-600 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Mic className="w-4 h-4 text-emerald-400" />
+                    <span className="text-xs font-semibold text-emerald-300">Backup Vocals:</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {song.players?.backupVocals?.map((player, playerIndex) => (
+                      <span key={playerIndex} className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-900/40 text-emerald-200 text-xs rounded-full font-medium border border-emerald-700/50">
+                        {player}
+                        <button 
+                          onClick={() => removePlayerFromInstrument(song.id, 'backupVocals', player)}
+                          className="text-emerald-400 hover:text-emerald-200 transition-colors"
+                          title="Remove player"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                    <button 
+                      onClick={() => {
+                        const name = prompt('Enter player name for Backup Vocals:');
+                        if (name) addPlayerToInstrument(song.id, 'backupVocals', name);
+                      }}
+                      className="px-3 py-1 text-emerald-400 hover:bg-emerald-900/40 text-xs rounded-full border border-emerald-700/50 hover:border-emerald-600 transition-colors font-medium"
+                    >
+                      + Add
+                    </button>
+                  </div>
+                </div>
+
+                {/* Legacy players - Mobile */}
+                {song.interestedPlayers.length > 0 && (
+                  <div className="p-3 bg-slate-700/40 border border-slate-600 rounded-lg">
+                    <div className="text-xs font-medium text-slate-400 mb-2">Legacy Interest List:</div>
+                    <div className="flex flex-wrap gap-2">
+                      {song.interestedPlayers.map((player, playerIndex) => (
+                        <span
+                          key={playerIndex}
+                          className="inline-flex items-center gap-1 px-3 py-1 bg-slate-600/60 text-slate-300 text-xs rounded-full border border-slate-500"
+                        >
+                          <Users className="w-3 h-3" />
+                          {player}
+                          <button
+                            onClick={() => removePlayerFromSong(song.id, player)}
+                            className="text-slate-400 hover:text-slate-200"
+                            title="Remove player"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                    <div className="text-xs text-slate-500 mt-2">
+                      ↑ These can be moved to specific instruments
                     </div>
                   </div>
-                </td>
-                <td className="px-4 py-3">
-                  <input
-                    type="text"
-                    value={song.duration}
-                    onChange={(e) => updateSong(song.id, 'duration', e.target.value)}
-                    className="w-full p-2 text-sm bg-slate-700/50 border border-slate-600 rounded focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-white placeholder-slate-400"
-                    placeholder="4:35"
-                    pattern="[0-9]+:[0-5][0-9]"
-                  />
-                </td>
-                <td className="px-4 py-3 text-center">
-                  <button
-                    onClick={() => deleteSong(song.id)}
-                    className="p-2 text-red-400 hover:text-red-300 hover:bg-red-900/40 rounded-lg transition-colors"
-                    title="Delete song"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   </div>
