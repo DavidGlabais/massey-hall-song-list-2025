@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { Music, Plus, Download, Upload, Save, Users, X, Trash2, Guitar, Mic, Search, Database, Cloud, CloudOff } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Music, Plus, Download, Users, X, Trash2, Guitar, Mic, Database, Cloud, CloudOff } from 'lucide-react';
 import { SongService } from './songService';
 import { supabase } from './supabaseClient';
 import type { DatabaseSong } from './supabaseClient';
+import { Notification } from './components/Notification';
 
 // Define the Song type
 interface Song {
@@ -18,6 +19,43 @@ interface Song {
     backupVocals: string[];
   };
 }
+
+// Helper function to check if there are meaningful changes between the current songs and updated songs
+const checkForRealChanges = (currentSongs: any[], updatedSongs: any[]): boolean => {
+  // If the number of songs is different, there's definitely a change
+  if (currentSongs.length !== updatedSongs.length) {
+    return true;
+  }
+
+  // Create a map of current songs by ID for easy comparison
+  const currentSongsMap = new Map();
+  currentSongs.forEach(song => {
+    currentSongsMap.set(song.id, song);
+  });
+
+  // Check each updated song for differences
+  for (const updatedSong of updatedSongs) {
+    const currentSong = currentSongsMap.get(updatedSong.id);
+    
+    // If a song was added or removed, there's a change
+    if (!currentSong) {
+      return true;
+    }
+    
+    // Check title and duration
+    if (currentSong.title !== updatedSong.title || currentSong.duration !== updatedSong.duration) {
+      return true;
+    }
+    
+    // Check player assignments (more complex comparison)
+    if (JSON.stringify(currentSong.players) !== JSON.stringify(updatedSong.players)) {
+      return true;
+    }
+  }
+  
+  // No significant changes found
+  return false;
+};
 
 const SongDurationTracker = () => {
   // Default songs to use if no saved data
@@ -44,8 +82,7 @@ const SongDurationTracker = () => {
     { id: 20, title: "You Got It", duration: "", interestedPlayers: [] },
     { id: 21, title: "Guest 1", duration: "4:00", interestedPlayers: [] },
     { id: 22, title: "Guest 2", duration: "4:00", interestedPlayers: [] },
-    { id: 23, title: "Guest 3", duration: "4:00", interestedPlayers: [] },
-    { id: 24, title: "Guest 4", duration: "4:00", interestedPlayers: [] }
+    { id: 23, title: "Guest 3", duration: "4:00", interestedPlayers: [] }
   ];
 
   // Load songs from localStorage or use default
@@ -91,6 +128,27 @@ const SongDurationTracker = () => {
   const [isOnline, setIsOnline] = useState(true);
   const [lastSynced, setLastSynced] = useState<Date | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  
+  // Notification state for non-blocking confirmations
+  const [notification, setNotification] = useState<{
+    message: string;
+    onConfirm: () => void;
+  } | null>(null);
+  
+  // Track last notification timestamp to prevent spam
+  const lastNotificationRef = useRef<number>(0);
+  // Ref mirror of isSyncing to avoid race conditions inside async callbacks
+  const isSyncingRef = useRef<boolean>(false);
+  // Timestamp when the current sync started (ms)
+  const syncingStartRef = useRef<number | null>(null);
+
+  // Manual force-clear for stuck syncs
+  const forceClearSync = () => {
+    console.warn('[WARN] forceClearSync() called - clearing syncing flags');
+    isSyncingRef.current = false;
+    syncingStartRef.current = null;
+    setIsSyncing(false);
+  };
 
   // Save to localStorage whenever songs change
   useEffect(() => {
@@ -98,11 +156,74 @@ const SongDurationTracker = () => {
   }, [songs]);
 
   // Database sync functions
-  const loadFromDatabase = async () => {
-    setIsSyncing(true);
+  const loadFromDatabase = useCallback(async () => {
+    console.debug('[DEBUG] loadFromDatabase() called');
+    // Prevent overlapping loads
+    if (isSyncingRef.current) {
+      console.log('Skipped loadFromDatabase because a sync is already in progress');
+      return;
+    }
+  setIsSyncing(true);
+  isSyncingRef.current = true;
+  syncingStartRef.current = Date.now();
+    console.debug('[DEBUG] loadFromDatabase - set isSyncing true');
     try {
       const dbSongs = await SongService.getAllSongs();
       if (dbSongs.length > 0) {
+        // Check for duplicates before loading
+        const titleMap = new Map();
+        const duplicates = [];
+        
+        for (const song of dbSongs) {
+          if (titleMap.has(song.title)) {
+            duplicates.push(song);
+            console.warn(`Found duplicate song: "${song.title}" (ID: ${song.id})`);
+          } else {
+            titleMap.set(song.title, song.id);
+          }
+        }
+        
+        // If duplicates found, alert user and offer to fix
+        if (duplicates.length > 0) {
+          console.warn(`Found ${duplicates.length} duplicate songs in database`);
+          // Use non-blocking notification instead of window.confirm
+          setNotification({
+            message: `Found ${duplicates.length} duplicate songs in the database. Fix now?`,
+            onConfirm: async () => {
+              await fixDatabaseDuplicates();
+              setNotification(null);
+              // ensure we clear syncing flags before returning
+              setIsSyncing(false);
+              isSyncingRef.current = false;
+              syncingStartRef.current = null;
+            }
+          });
+          return; // This will reload after fixing
+        }
+        
+        // Check for Guest titles without numbers
+        const guestSongsWithoutNumbers = dbSongs.filter(song => 
+          (song.title.trim() === "Guest" || 
+          (song.title.includes("Guest") && !song.title.match(/Guest\s+\d+/)))
+        );
+        
+        if (guestSongsWithoutNumbers.length > 0) {
+          console.warn(`Found ${guestSongsWithoutNumbers.length} Guest songs without numbers`);
+          // Use non-blocking notification instead of window.confirm
+          setNotification({
+            message: `Found ${guestSongsWithoutNumbers.length} Guest songs without numbers. Fix now?`,
+            onConfirm: async () => {
+              await fixGuestTitles();
+              setNotification(null);
+              // ensure we clear syncing flags before returning
+              setIsSyncing(false);
+              isSyncingRef.current = false;
+              syncingStartRef.current = null;
+            }
+          });
+          return; // This will reload after fixing
+        }
+        
         // Convert database songs to app format
         const convertedSongs = dbSongs.map(dbSong => ({
           id: dbSong.id,
@@ -111,6 +232,7 @@ const SongDurationTracker = () => {
           interestedPlayers: [], // Keep for legacy compatibility
           players: dbSong.players
         }));
+        
         setSongs(convertedSongs);
         setLastSynced(new Date());
         setIsOnline(true);
@@ -121,11 +243,34 @@ const SongDurationTracker = () => {
       setIsOnline(false);
     } finally {
       setIsSyncing(false);
+      isSyncingRef.current = false;
+  syncingStartRef.current = null;
+      // Safety fallback: ensure syncing flag clears after 20s in case of an unexpected hang
+      setTimeout(() => {
+        if (isSyncingRef.current) {
+          console.warn('[WARN] isSyncingRef was still true after timeout, forcing clear');
+          isSyncingRef.current = false;
+          setIsSyncing(false);
+        }
+      }, 20000);
     }
-  };
+  // Intentionally run only on mount; these helper functions are defined later and
+  // including them would create circular dependencies. The function uses stable
+  // services and is safe to run once on mount.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const saveToDatabase = async () => {
-    setIsSyncing(true);
+  const saveToDatabase = useCallback(async () => {
+  console.debug('[DEBUG] saveToDatabase() called');
+  // Prevent overlapping saves
+    if (isSyncingRef.current) {
+      console.log('Skipped saveToDatabase because a sync is already in progress');
+      return;
+    }
+  setIsSyncing(true);
+    isSyncingRef.current = true;
+    syncingStartRef.current = Date.now();
+  console.debug('[DEBUG] saveToDatabase - set isSyncing true');
     try {
       // Convert app songs to database format
       const dbSongs: DatabaseSong[] = songs.map(song => ({
@@ -154,42 +299,157 @@ const SongDurationTracker = () => {
       setIsOnline(false);
     } finally {
       setIsSyncing(false);
+      isSyncingRef.current = false;
+      syncingStartRef.current = null;
+      // Safety fallback: ensure syncing flag clears after 20s in case of an unexpected hang
+      setTimeout(() => {
+        if (isSyncingRef.current) {
+          console.warn('[WARN] isSyncingRef was still true after timeout, forcing clear');
+          isSyncingRef.current = false;
+          setIsSyncing(false);
+        }
+      }, 20000);
     }
-  };
+  }, [songs]);
+
+  // Watchdog: if a sync is stuck for more than 25s, force-clear it
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (isSyncingRef.current && syncingStartRef.current) {
+        const elapsed = Date.now() - syncingStartRef.current;
+        if (elapsed > 25000) {
+          console.warn('[WARN] Sync appears stuck (>25s). Forcing clear.');
+          isSyncingRef.current = false;
+          syncingStartRef.current = null;
+          setIsSyncing(false);
+        }
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // Debug watcher: log changes to isSyncing and the ref
+  useEffect(() => {
+    console.debug('[DEBUG] isSyncing state changed:', { isSyncing, isSyncingRef: isSyncingRef.current });
+  }, [isSyncing]);
 
   // Auto-save to database when songs change
   useEffect(() => {
     if (songs.length > 0) {
       const timeoutId = setTimeout(() => {
-        saveToDatabase();
+  // Avoid triggering auto-save while a manual sync is in progress
+  if (!isSyncingRef.current) saveToDatabase();
       }, 2000); // Auto-save 2 seconds after changes
 
       return () => clearTimeout(timeoutId);
     }
-  }, [songs]);
+  }, [songs, saveToDatabase]);
 
   // Load from database on component mount
   useEffect(() => {
     loadFromDatabase();
-    
-    // Set up real-time subscription
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Set up real-time subscription with smarter handling
+  useEffect(() => {
     const subscription = SongService.subscribeToChanges((updatedSongs) => {
-      const convertedSongs = updatedSongs.map(dbSong => ({
-        id: dbSong.id,
-        title: dbSong.title,
-        duration: dbSong.duration,
-        interestedPlayers: [],
-        players: dbSong.players
-      }));
-      setSongs(convertedSongs);
-      setLastSynced(new Date());
-      console.log('🔄 Real-time update received');
+      // Only update if we receive a different set of songs (prevents overwriting local changes)
+      console.log('Received real-time update, checking if update is needed...');
+      
+      // Don't automatically apply every update - this can cause local changes to be lost
+      // Instead, show a notification or apply only if confirmed
+      if (isOnline) {
+        const now = Date.now();
+        // Prevent notification spam - only show once every 30 seconds
+        if (now - lastNotificationRef.current > 30000) {
+          lastNotificationRef.current = now;
+          
+          // Compare current songs with updated songs to check if there are actual changes
+          const hasChanges = checkForRealChanges(songs, updatedSongs);
+          
+          if (hasChanges) {
+            // Use non-blocking notification instead of window.confirm
+            setNotification({
+              message: 'New changes detected in the database. Load the latest data?',
+              onConfirm: () => {
+                const convertedSongs = updatedSongs.map(dbSong => ({
+                  id: dbSong.id,
+                  title: dbSong.title,
+                  duration: dbSong.duration,
+                  interestedPlayers: [],
+                  players: dbSong.players
+                }));
+                setSongs(convertedSongs);
+                setLastSynced(new Date());
+                console.log('🔄 Real-time update applied');
+                setNotification(null);
+              }
+            });
+          } else {
+            console.log('🔄 No significant changes detected, skipping notification');
+          }
+        } else {
+          console.log('🔄 Skipping notification - too soon after last one');
+        }
+      }
     });
 
     return () => {
       subscription.unsubscribe();
     };
-  }, []);
+  }, [isOnline, songs]);
+
+  // Fix Guest titles - ensure they include the numbers
+  const fixGuestTitles = async () => {
+    try {
+      console.log('Checking for Guest titles that need fixing...');
+      
+      // Get all songs from the database
+      const { data: allSongs, error } = await supabase
+        .from('songs')
+        .select('*')
+        .order('id');
+        
+      if (error) throw error;
+      
+      // Check for Guest songs
+      const guestSongs = allSongs?.filter(song => 
+        (song.title.trim() === "Guest" || 
+        (song.title.includes("Guest") && !song.title.match(/Guest\s+\d+/)))
+      );
+      
+      console.log('Found Guest songs that need fixing:', guestSongs?.length || 0);
+      
+      if (guestSongs && guestSongs.length > 0) {
+        // Fix the Guest titles
+        for (let i = 0; i < guestSongs.length; i++) {
+          const song = guestSongs[i];
+          const newTitle = `Guest ${i + 1}`;
+          
+          console.log(`Fixing: "${song.title}" -> "${newTitle}"`);
+          
+          await supabase.from('songs').update({
+            title: newTitle
+          }).eq('id', song.id);
+        }
+        
+        console.log('Guest titles fixed successfully');
+        
+        // Reload from database
+        await loadFromDatabase();
+        
+        alert('Guest titles have been fixed!');
+      } else {
+        console.log('No Guest titles need fixing');
+        alert('Guest titles are already correct.');
+      }
+    } catch (error) {
+      console.error('Error fixing Guest titles:', error);
+      alert('Error fixing Guest titles. See console for details.');
+    }
+  };
 
   // Fix database duplicates
   const fixDatabaseDuplicates = async () => {
@@ -233,6 +493,67 @@ const SongDurationTracker = () => {
       
     } catch (error) {
       console.error('Error fixing database duplicates:', error);
+    }
+  };
+
+  // Recreate the correct song structure in database
+  const recreate23Songs = async () => {
+    const correctSongs = [
+      { id: 1, title: "Satellite of Love (Lou Reed) – Live Beck Version", duration: "3:37" },
+      { id: 2, title: "After Midnight – JJ Cale", duration: "2:29" },
+      { id: 3, title: "Reelin' in the Years – Steely Dan", duration: "4:35" },
+      { id: 4, title: "Friday I'm in Love – The Cure", duration: "3:34" },
+      { id: 5, title: "Layla – Original version", duration: "7:10" },
+      { id: 6, title: "Lotta Love – Nicolette Larson", duration: "3:11" },
+      { id: 7, title: "Whose Bed Have Your Boots Been Under", duration: "" },
+      { id: 8, title: "The Perfect Pair - Elica", duration: "" },
+      { id: 9, title: "Our Day Will Come - Laura", duration: "" },
+      { id: 10, title: "Sultans of Swing", duration: "5:48" },
+      { id: 11, title: "Country Roads", duration: "3:13" },
+      { id: 12, title: "Hasn't Hit Me Yet", duration: "" },
+      { id: 13, title: "It's Too Late", duration: "3:53" },
+      { id: 14, title: "Rhinestone Cowboy", duration: "3:15" },
+      { id: 15, title: "Can't Take My Eyes Off You", duration: "3:23" },
+      { id: 16, title: "You'll Never Find Another Love Like Mine", duration: "" },
+      { id: 17, title: "Winners and Losers - Hamilton Joe Frank and Reynolds", duration: "3:00" },
+      { id: 18, title: "He's Not Heavy, He's My Brother", duration: "" },
+      { id: 19, title: "Suspicious Minds", duration: "4:22" },
+      { id: 20, title: "You Got It", duration: "" },
+      { id: 21, title: "Guest 1", duration: "4:00" },
+      { id: 22, title: "Guest 2", duration: "4:00" },
+      { id: 23, title: "Guest 3", duration: "4:00" }
+    ];
+
+    try {
+      // Clear existing songs
+      await supabase.from('songs').delete().neq('id', 0);
+      
+      // First fix the database
+      for (const song of correctSongs) {
+        await supabase.from('songs').upsert({
+          id: song.id,
+          title: song.title,
+          duration: song.duration,
+          players: {
+            electricGuitar: [],
+            acousticGuitar: [],
+            bass: [],
+            vocals: [],
+            backupVocals: []
+          }
+        });
+      }
+      
+      console.log('Your correct song list restored to database');
+      
+      // Now reload from database to update the UI
+      await loadFromDatabase();
+      
+      // Alert the user
+      alert('Original song list has been restored successfully!');
+    } catch (error) {
+      console.error('Error recreating songs:', error);
+      alert('Error restoring song list. See console for details.');
     }
   };
 
@@ -371,8 +692,17 @@ const SongDurationTracker = () => {
     setSongs([...songs, { id: newId, title: "", duration: "", interestedPlayers: [] }]);
   };
 
-  const deleteSong = (id: number) => {
+  const deleteSong = async (id: number) => {
+    // Update local state
     setSongs(songs.filter((song: Song) => song.id !== id));
+    
+    // Delete from database
+    try {
+      await supabase.from('songs').delete().eq('id', id);
+      console.log(`Song with ID ${id} deleted from database`);
+    } catch (error) {
+      console.error(`Failed to delete song with ID ${id} from database:`, error);
+    }
   };
 
   // Add a player to a song's interested list
@@ -391,7 +721,8 @@ const SongDurationTracker = () => {
   const addPlayerToInstrument = (songId: number, instrument: string, playerName: string) => {
     if (!playerName.trim()) return;
     
-    setSongs(songs.map((song: Song) => {
+    // Create a new songs array with the updated song
+    const updatedSongs = songs.map((song: Song) => {
       if (song.id !== songId) return song;
       
       // Initialize players object if it doesn't exist
@@ -416,12 +747,34 @@ const SongDurationTracker = () => {
       }
       
       return song;
-    }));
+    });
+    
+    // Update state
+    setSongs(updatedSongs);
+    
+    // Find the updated song to save directly to database
+    const songToUpdate = updatedSongs.find(song => song.id === songId);
+    if (songToUpdate && songToUpdate.players) {
+      // Save directly to database
+      SongService.saveSong({
+        id: songToUpdate.id,
+        title: songToUpdate.title,
+        duration: songToUpdate.duration,
+        players: songToUpdate.players
+      }).then(() => {
+        // Force a refresh from the database after a short delay
+        // This ensures the UI is updated with the latest data
+        setTimeout(() => {
+          loadFromDatabase();
+        }, 300);
+      });
+    }
   };
 
   // Remove a player from a specific instrument
   const removePlayerFromInstrument = (songId: number, instrument: string, playerName: string) => {
-    setSongs(songs.map((song: Song) => {
+    // Create a new songs array with the updated song
+    const updatedSongs = songs.map((song: Song) => {
       if (song.id !== songId || !song.players) return song;
       
       return {
@@ -431,7 +784,28 @@ const SongDurationTracker = () => {
           [instrument]: song.players[instrument as keyof typeof song.players]?.filter(player => player !== playerName) || []
         }
       };
-    }));
+    });
+    
+    // Update state
+    setSongs(updatedSongs);
+    
+    // Find the updated song to save directly to database
+    const songToUpdate = updatedSongs.find(song => song.id === songId);
+    if (songToUpdate && songToUpdate.players) {
+      // Save directly to database
+      SongService.saveSong({
+        id: songToUpdate.id,
+        title: songToUpdate.title,
+        duration: songToUpdate.duration,
+        players: songToUpdate.players
+      }).then(() => {
+        // Force a refresh from the database after a short delay
+        // This ensures the UI is updated with the latest data
+        setTimeout(() => {
+          loadFromDatabase();
+        }, 300);
+      });
+    }
   };
 
   // Remove a player from a song's interested list
@@ -543,284 +917,280 @@ const SongDurationTracker = () => {
   };
 
   return (
-    <div className="max-w-6xl mx-auto p-6 bg-white">
-      <div className="mb-6">
-        <div className="flex items-center gap-3 mb-4">
-          <Music className="w-8 h-8 text-blue-600" />
-          <h1 className="text-3xl font-bold text-gray-900">Massey Hall Song List November 15 2025</h1>
-        </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+      <div className="max-w-6xl mx-auto p-6">
+        {/* Non-blocking notification */}
+        {notification && (
+          <Notification
+            message={notification.message}
+            onConfirm={notification.onConfirm}
+            onClose={() => setNotification(null)}
+          />
+        )}
         
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex gap-4">
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <div className="text-sm text-blue-600 font-medium">Total Playlist Time</div>
-              <div className="text-2xl font-bold text-blue-900">{formatTotalTime()}</div>
-              <div className="text-sm text-blue-600">{totalTime.songsWithTime} of {songs.length} songs timed</div>
+        <div className="mb-8">
+          <div className="flex items-center gap-4 mb-6">
+            <div className="p-3 bg-gradient-to-r from-amber-500 to-orange-500 rounded-xl shadow-lg">
+              <Music className="w-8 h-8 text-white" />
             </div>
-            
-            <div className={`border rounded-lg p-4 ${isOnline ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-              <div className="flex items-center gap-2 text-sm font-medium">
-                {isSyncing ? (
-                  <>
-                    <div className="animate-spin w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full"></div>
-                    <span className="text-blue-600">Syncing...</span>
-                  </>
-                ) : isOnline ? (
-                  <>
-                    <Cloud className="w-4 h-4 text-green-600" />
-                    <span className="text-green-600">Online</span>
-                  </>
-                ) : (
-                  <>
-                    <CloudOff className="w-4 h-4 text-red-600" />
-                    <span className="text-red-600">Offline</span>
-                  </>
-                )}
-              </div>
-              {lastSynced && (
-                <div className="text-xs text-gray-500 mt-1">
-                  Last synced: {lastSynced.toLocaleTimeString()}
-                </div>
-              )}
-            </div>
+            <h1 className="text-3xl font-bold text-white tracking-tight">Massey Hall Song List</h1>
+            <span className="text-lg text-amber-400 font-medium">November 15, 2025</span>
           </div>
           
-          <div className="flex gap-2">
-            <button
-              onClick={addSong}
-              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              Add Song
-            </button>
-            <button
-              onClick={loadFromDatabase}
-              disabled={isSyncing}
-              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
-            >
-              <Database className="w-4 h-4" />
-              Sync Now
-            </button>
-            <button
-              onClick={exportToCSV}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              <Download className="w-4 h-4" />
-              Export CSV
-            </button>
-            <button
-              onClick={exportToJSON}
-              className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-            >
-              <Save className="w-4 h-4" />
-              Export JSON
-            </button>
-            <label className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors cursor-pointer">
-              <Upload className="w-4 h-4" />
-              Import JSON
-              <input
-                type="file"
-                accept=".json"
-                onChange={importFromJSON}
-                className="hidden"
-              />
-            </label>
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex gap-6">
+              <div className="bg-slate-800/80 backdrop-blur border border-slate-600 rounded-xl p-5 shadow-xl">
+                <div className="text-sm text-amber-400 font-semibold mb-1">Total Playlist Time</div>
+                <div className="text-2xl font-bold text-white">{formatTotalTime()}</div>
+                <div className="text-sm text-slate-300">{totalTime.songsWithTime} of {songs.length} songs timed</div>
+              </div>
+              
+              <div className={`border rounded-xl p-5 shadow-xl backdrop-blur ${isOnline ? 'bg-emerald-900/80 border-emerald-600' : 'bg-red-900/80 border-red-600'}`}>
+                <div className="flex items-center gap-2 text-sm font-semibold">
+                  {isSyncing ? (
+                    <>
+                      <div className="animate-spin w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full"></div>
+                      <span className="text-amber-400">Syncing...</span>
+                    </>
+                  ) : isOnline ? (
+                    <>
+                      <Cloud className="w-4 h-4 text-emerald-400" />
+                      <span className="text-emerald-400">Online</span>
+                    </>
+                  ) : (
+                    <>
+                      <CloudOff className="w-4 h-4 text-red-400" />
+                      <span className="text-red-400">Offline</span>
+                    </>
+                  )}
+                </div>
+                {lastSynced && (
+                  <div className="text-xs text-slate-400 mt-1">
+                    Last synced: {lastSynced.toLocaleTimeString()}
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            <div className="flex gap-3">
+              {/* Primary Controls */}
+              <button
+                onClick={addSong}
+                className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-emerald-600 to-emerald-700 text-white rounded-xl hover:from-emerald-700 hover:to-emerald-800 transition-all duration-200 shadow-lg hover:shadow-xl font-medium border border-emerald-500"
+              >
+                <Plus className="w-4 h-4" />
+                Add Song
+              </button>
+              <button
+                onClick={loadFromDatabase}
+                disabled={isSyncing}
+                className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-amber-600 to-orange-600 text-white rounded-xl hover:from-amber-700 hover:to-orange-700 transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed font-medium border border-amber-500"
+              >
+                <Database className="w-4 h-4" />
+                Sync Now
+              </button>
+              <button
+                onClick={exportToCSV}
+                title="Export to Google Sheets, Excel, or print"
+                className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-slate-600 to-slate-700 text-white rounded-xl hover:from-slate-700 hover:to-slate-800 transition-all duration-200 shadow-lg hover:shadow-xl font-medium border border-slate-500"
+              >
+                <Download className="w-4 h-4" />
+                Export CSV
+              </button>
+            </div>
           </div>
         </div>
-      </div>
-
-      <div className="border border-gray-200 rounded-lg overflow-hidden">
-        <table className="w-full">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 w-20">Song #</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-gray-900">Title & Players</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 w-32">Duration (M:SS)</th>
-              <th className="px-4 py-3 text-center text-sm font-medium text-gray-900 w-20">Action</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200">
-            {songs.map((song: Song, index: number) => (
-              <tr key={song.id} className="hover:bg-gray-50">
-                <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                  {index + 1}
-                </td>
-                <td className="px-4 py-3">
-                  <div className="space-y-2">
-                    {/* Song title input */}
-                    <input
-                      type="text"
-                      value={song.title}
-                      onChange={(e) => updateSong(song.id, 'title', e.target.value)}
-                      className="w-full p-2 text-sm border border-gray-200 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="Enter song title..."
-                    />
-                    
-                    {/* Players section - NEW INSTRUMENT-BASED MOCKUP */}
-                    <div className="space-y-2 mt-2">
-                      <div className="text-xs font-medium text-gray-600 mb-2">Band Members by Instrument:</div>
+        <div className="bg-slate-800/80 backdrop-blur border border-slate-600 rounded-2xl overflow-hidden shadow-2xl">
+          <table className="w-full">
+            <thead className="bg-slate-700/90">
+              <tr>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-amber-400 w-20">Song #</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-amber-400">Title & Players</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-amber-400 w-32">Duration (M:SS)</th>
+                <th className="px-6 py-4 text-center text-sm font-semibold text-amber-400 w-20">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-600">
+              {songs.map((song: Song, index: number) => (
+                <tr key={song.id} className="hover:bg-slate-700/50 transition-colors duration-150">
+                  <td className="px-6 py-4 text-sm font-semibold text-slate-200">
+                    {index + 1}
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="space-y-3">
+                      {/* Song title input */}
+                      <input
+                        type="text"
+                        value={song.title}
+                        onChange={(e) => updateSong(song.id, 'title', e.target.value)}
+                        className="w-full p-3 text-sm bg-slate-700/50 border border-slate-600 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-white placeholder-slate-400 font-medium"
+                        placeholder="Enter song title..."
+                      />
                       
-                      {/* Electric Guitar */}
-                      <div className="flex items-center gap-2 p-2 bg-red-50 border border-red-200 rounded">
-                        <Guitar className="w-4 h-4 text-red-600" />
-                        <span className="text-xs font-medium text-red-700 min-w-[80px]">Electric:</span>
-                        <div className="flex flex-wrap gap-1 flex-1">
-                          {/* Show actual players from data */}
-                          {song.players?.electricGuitar?.map((player, playerIndex) => (
-                            <span key={playerIndex} className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 text-red-800 text-xs rounded">
-                              {player}
-                              <button 
-                                onClick={() => removePlayerFromInstrument(song.id, 'electricGuitar', player)}
-                                className="text-red-600 hover:text-red-800"
-                                title="Remove player"
-                              >
-                                <X className="w-3 h-3" />
-                              </button>
-                            </span>
-                          ))}
-                          <button 
-                            onClick={() => {
-                              const name = prompt('Enter player name for Electric Guitar:');
-                              if (name) addPlayerToInstrument(song.id, 'electricGuitar', name);
-                            }}
-                            className="px-2 py-1 text-red-600 hover:bg-red-100 text-xs rounded border border-red-300 hover:border-red-400"
-                          >
-                            + Add
-                          </button>
+                      {/* Players section - Sophisticated monochromatic design */}
+                      <div className="space-y-3 mt-3">
+                        <div className="text-xs font-semibold text-amber-400 mb-3">Band Members by Instrument:</div>
+                        
+                        {/* Electric Guitar */}
+                        <div className="flex items-center gap-3 p-3 bg-slate-700/60 border border-slate-600 rounded-lg">
+                          <Guitar className="w-4 h-4 text-red-400 flex-shrink-0" />
+                          <span className="text-xs font-semibold text-red-300 min-w-[80px]">Electric:</span>
+                          <div className="flex flex-wrap gap-2 flex-1">
+                            {song.players?.electricGuitar?.map((player, playerIndex) => (
+                              <span key={playerIndex} className="inline-flex items-center gap-1 px-3 py-1 bg-red-900/40 text-red-200 text-xs rounded-full font-medium border border-red-700/50">
+                                {player}
+                                <button 
+                                  onClick={() => removePlayerFromInstrument(song.id, 'electricGuitar', player)}
+                                  className="text-red-400 hover:text-red-200 transition-colors"
+                                  title="Remove player"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </span>
+                            ))}
+                            <button 
+                              onClick={() => {
+                                const name = prompt('Enter player name for Electric Guitar:');
+                                if (name) addPlayerToInstrument(song.id, 'electricGuitar', name);
+                              }}
+                              className="px-3 py-1 text-red-400 hover:bg-red-900/40 text-xs rounded-full border border-red-700/50 hover:border-red-600 transition-colors font-medium"
+                            >
+                              + Add
+                            </button>
+                          </div>
                         </div>
-                      </div>
 
-                      {/* Acoustic Guitar */}
-                      <div className="flex items-center gap-2 p-2 bg-orange-50 border border-orange-200 rounded">
-                        <Guitar className="w-4 h-4 text-orange-600" />
-                        <span className="text-xs font-medium text-orange-700 min-w-[80px]">Acoustic:</span>
-                        <div className="flex flex-wrap gap-1 flex-1">
-                          {song.players?.acousticGuitar?.map((player, playerIndex) => (
-                            <span key={playerIndex} className="inline-flex items-center gap-1 px-2 py-1 bg-orange-100 text-orange-800 text-xs rounded">
-                              {player}
-                              <button 
-                                onClick={() => removePlayerFromInstrument(song.id, 'acousticGuitar', player)}
-                                className="text-orange-600 hover:text-orange-800"
-                                title="Remove player"
-                              >
-                                <X className="w-3 h-3" />
-                              </button>
-                            </span>
-                          ))}
-                          <button 
-                            onClick={() => {
-                              const name = prompt('Enter player name for Acoustic Guitar:');
-                              if (name) addPlayerToInstrument(song.id, 'acousticGuitar', name);
-                            }}
-                            className="px-2 py-1 text-orange-600 hover:bg-orange-100 text-xs rounded border border-orange-300 hover:border-orange-400"
-                          >
-                            + Add
-                          </button>
+                        {/* Acoustic Guitar */}
+                        <div className="flex items-center gap-3 p-3 bg-slate-700/60 border border-slate-600 rounded-lg">
+                          <Guitar className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                          <span className="text-xs font-semibold text-amber-300 min-w-[80px]">Acoustic:</span>
+                          <div className="flex flex-wrap gap-2 flex-1">
+                            {song.players?.acousticGuitar?.map((player, playerIndex) => (
+                              <span key={playerIndex} className="inline-flex items-center gap-1 px-3 py-1 bg-amber-900/40 text-amber-200 text-xs rounded-full font-medium border border-amber-700/50">
+                                {player}
+                                <button 
+                                  onClick={() => removePlayerFromInstrument(song.id, 'acousticGuitar', player)}
+                                  className="text-amber-400 hover:text-amber-200 transition-colors"
+                                  title="Remove player"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </span>
+                            ))}
+                            <button 
+                              onClick={() => {
+                                const name = prompt('Enter player name for Acoustic Guitar:');
+                                if (name) addPlayerToInstrument(song.id, 'acousticGuitar', name);
+                              }}
+                              className="px-3 py-1 text-amber-400 hover:bg-amber-900/40 text-xs rounded-full border border-amber-700/50 hover:border-amber-600 transition-colors font-medium"
+                            >
+                              + Add
+                            </button>
+                          </div>
                         </div>
-                      </div>
 
-                      {/* Bass */}
-                      <div className="flex items-center gap-2 p-2 bg-purple-50 border border-purple-200 rounded">
-                        <Guitar className="w-4 h-4 text-purple-600" />
-                        <span className="text-xs font-medium text-purple-700 min-w-[80px]">Bass:</span>
-                        <div className="flex flex-wrap gap-1 flex-1">
-                          {song.players?.bass?.map((player, playerIndex) => (
-                            <span key={playerIndex} className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded">
-                              {player}
-                              <button 
-                                onClick={() => removePlayerFromInstrument(song.id, 'bass', player)}
-                                className="text-purple-600 hover:text-purple-800"
-                                title="Remove player"
-                              >
-                                <X className="w-3 h-3" />
-                              </button>
-                            </span>
-                          ))}
-                          <button 
-                            onClick={() => {
-                              const name = prompt('Enter player name for Bass:');
-                              if (name) addPlayerToInstrument(song.id, 'bass', name);
-                            }}
-                            className="px-2 py-1 text-purple-600 hover:bg-purple-100 text-xs rounded border border-purple-300 hover:border-purple-400"
-                          >
-                            + Add
-                          </button>
+                        {/* Bass */}
+                        <div className="flex items-center gap-3 p-3 bg-slate-700/60 border border-slate-600 rounded-lg">
+                          <Guitar className="w-4 h-4 text-purple-400 flex-shrink-0" />
+                          <span className="text-xs font-semibold text-purple-300 min-w-[80px]">Bass:</span>
+                          <div className="flex flex-wrap gap-2 flex-1">
+                            {song.players?.bass?.map((player, playerIndex) => (
+                              <span key={playerIndex} className="inline-flex items-center gap-1 px-3 py-1 bg-purple-900/40 text-purple-200 text-xs rounded-full font-medium border border-purple-700/50">
+                                {player}
+                                <button 
+                                  onClick={() => removePlayerFromInstrument(song.id, 'bass', player)}
+                                  className="text-purple-400 hover:text-purple-200 transition-colors"
+                                  title="Remove player"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </span>
+                            ))}
+                            <button 
+                              onClick={() => {
+                                const name = prompt('Enter player name for Bass:');
+                                if (name) addPlayerToInstrument(song.id, 'bass', name);
+                              }}
+                              className="px-3 py-1 text-purple-400 hover:bg-purple-900/40 text-xs rounded-full border border-purple-700/50 hover:border-purple-600 transition-colors font-medium"
+                            >
+                              + Add
+                            </button>
+                          </div>
                         </div>
-                      </div>
 
-                      {/* Vocals */}
-                      <div className="flex items-center gap-2 p-2 bg-blue-50 border border-blue-200 rounded">
-                        <Mic className="w-4 h-4 text-blue-600" />
-                        <span className="text-xs font-medium text-blue-700 min-w-[80px]">Vocals:</span>
-                        <div className="flex flex-wrap gap-1 flex-1">
-                          {song.players?.vocals?.map((player, playerIndex) => (
-                            <span key={playerIndex} className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
-                              {player}
-                              <button 
-                                onClick={() => removePlayerFromInstrument(song.id, 'vocals', player)}
-                                className="text-blue-600 hover:text-blue-800"
-                                title="Remove player"
-                              >
-                                <X className="w-3 h-3" />
-                              </button>
-                            </span>
-                          ))}
-                          <button 
-                            onClick={() => {
-                              const name = prompt('Enter player name for Vocals:');
-                              if (name) addPlayerToInstrument(song.id, 'vocals', name);
-                            }}
-                            className="px-2 py-1 text-blue-600 hover:bg-blue-100 text-xs rounded border border-blue-300 hover:border-blue-400"
-                          >
-                            + Add
-                          </button>
+                        {/* Vocals */}
+                        <div className="flex items-center gap-3 p-3 bg-slate-700/60 border border-slate-600 rounded-lg">
+                          <Mic className="w-4 h-4 text-blue-400 flex-shrink-0" />
+                          <span className="text-xs font-semibold text-blue-300 min-w-[80px]">Vocals:</span>
+                          <div className="flex flex-wrap gap-2 flex-1">
+                            {song.players?.vocals?.map((player, playerIndex) => (
+                              <span key={playerIndex} className="inline-flex items-center gap-1 px-3 py-1 bg-blue-900/40 text-blue-200 text-xs rounded-full font-medium border border-blue-700/50">
+                                {player}
+                                <button 
+                                  onClick={() => removePlayerFromInstrument(song.id, 'vocals', player)}
+                                  className="text-blue-400 hover:text-blue-200 transition-colors"
+                                  title="Remove player"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </span>
+                            ))}
+                            <button 
+                              onClick={() => {
+                                const name = prompt('Enter player name for Vocals:');
+                                if (name) addPlayerToInstrument(song.id, 'vocals', name);
+                              }}
+                              className="px-3 py-1 text-blue-400 hover:bg-blue-900/40 text-xs rounded-full border border-blue-700/50 hover:border-blue-600 transition-colors font-medium"
+                            >
+                              + Add
+                            </button>
+                          </div>
                         </div>
-                      </div>
 
-                      {/* Backup Vocals */}
-                      <div className="flex items-center gap-2 p-2 bg-teal-50 border border-teal-200 rounded">
-                        <Mic className="w-4 h-4 text-teal-600" />
-                        <span className="text-xs font-medium text-teal-700 min-w-[80px]">Backup:</span>
-                        <div className="flex flex-wrap gap-1 flex-1">
-                          {song.players?.backupVocals?.map((player, playerIndex) => (
-                            <span key={playerIndex} className="inline-flex items-center gap-1 px-2 py-1 bg-teal-100 text-teal-800 text-xs rounded">
-                              {player}
-                              <button 
-                                onClick={() => removePlayerFromInstrument(song.id, 'backupVocals', player)}
-                                className="text-teal-600 hover:text-teal-800"
-                                title="Remove player"
-                              >
-                                <X className="w-3 h-3" />
-                              </button>
-                            </span>
-                          ))}
-                          <button 
-                            onClick={() => {
-                              const name = prompt('Enter player name for Backup Vocals:');
-                              if (name) addPlayerToInstrument(song.id, 'backupVocals', name);
-                            }}
-                            className="px-2 py-1 text-teal-600 hover:bg-teal-100 text-xs rounded border border-teal-300 hover:border-teal-400"
-                          >
-                            + Add
-                          </button>
+                        {/* Backup Vocals */}
+                        <div className="flex items-center gap-3 p-3 bg-slate-700/60 border border-slate-600 rounded-lg">
+                          <Mic className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                          <span className="text-xs font-semibold text-emerald-300 min-w-[80px]">Backup:</span>
+                          <div className="flex flex-wrap gap-2 flex-1">
+                            {song.players?.backupVocals?.map((player, playerIndex) => (
+                              <span key={playerIndex} className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-900/40 text-emerald-200 text-xs rounded-full font-medium border border-emerald-700/50">
+                                {player}
+                                <button 
+                                  onClick={() => removePlayerFromInstrument(song.id, 'backupVocals', player)}
+                                  className="text-emerald-400 hover:text-emerald-200 transition-colors"
+                                  title="Remove player"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </span>
+                            ))}
+                            <button 
+                              onClick={() => {
+                                const name = prompt('Enter player name for Backup Vocals:');
+                                if (name) addPlayerToInstrument(song.id, 'backupVocals', name);
+                              }}
+                              className="px-3 py-1 text-emerald-400 hover:bg-emerald-900/40 text-xs rounded-full border border-emerald-700/50 hover:border-emerald-600 transition-colors font-medium"
+                            >
+                              + Add
+                            </button>
+                          </div>
                         </div>
-                      </div>
 
                       {/* Old system data preservation */}
                       {song.interestedPlayers.length > 0 && (
-                        <div className="mt-3 p-2 bg-gray-50 border border-gray-200 rounded">
-                          <div className="text-xs font-medium text-gray-600 mb-1">Legacy Interest List:</div>
-                          <div className="flex flex-wrap gap-1">
+                        <div className="mt-3 p-3 bg-slate-700/40 border border-slate-600 rounded-lg">
+                          <div className="text-xs font-medium text-slate-400 mb-2">Legacy Interest List:</div>
+                          <div className="flex flex-wrap gap-2">
                             {song.interestedPlayers.map((player, playerIndex) => (
                               <span
                                 key={playerIndex}
-                                className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded"
+                                className="inline-flex items-center gap-1 px-3 py-1 bg-slate-600/60 text-slate-300 text-xs rounded-full border border-slate-500"
                               >
                                 <Users className="w-3 h-3" />
                                 {player}
                                 <button
                                   onClick={() => removePlayerFromSong(song.id, player)}
-                                  className="text-gray-500 hover:text-gray-700"
+                                  className="text-slate-400 hover:text-slate-200"
                                   title="Remove player"
                                 >
                                   <X className="w-3 h-3" />
@@ -828,7 +1198,7 @@ const SongDurationTracker = () => {
                               </span>
                             ))}
                           </div>
-                          <div className="text-xs text-gray-500 mt-1">
+                          <div className="text-xs text-slate-500 mt-2">
                             ↑ These can be moved to specific instruments
                           </div>
                         </div>
@@ -841,7 +1211,7 @@ const SongDurationTracker = () => {
                     type="text"
                     value={song.duration}
                     onChange={(e) => updateSong(song.id, 'duration', e.target.value)}
-                    className="w-full p-2 text-sm border border-gray-200 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full p-2 text-sm bg-slate-700/50 border border-slate-600 rounded focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-white placeholder-slate-400"
                     placeholder="4:35"
                     pattern="[0-9]+:[0-5][0-9]"
                   />
@@ -849,7 +1219,7 @@ const SongDurationTracker = () => {
                 <td className="px-4 py-3 text-center">
                   <button
                     onClick={() => deleteSong(song.id)}
-                    className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50 rounded"
+                    className="p-2 text-red-400 hover:text-red-300 hover:bg-red-900/40 rounded-lg transition-colors"
                     title="Delete song"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -860,19 +1230,8 @@ const SongDurationTracker = () => {
           </tbody>
         </table>
       </div>
-
-      <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-        <h3 className="text-lg font-semibold text-gray-900 mb-2">Instructions:</h3>
-        <ul className="text-sm text-gray-600 space-y-1">
-          <li>• Click on any cell to edit song titles or durations</li>
-          <li>• Enter durations in M:SS format (e.g., 4:35 for 4 minutes 35 seconds)</li>
-          <li>• Total time updates automatically as you add durations</li>
-          <li>• Use "Add Song" to add new songs to your playlist</li>
-          <li>• Click "Export CSV" to download your playlist for use in Excel or Google Sheets</li>
-          <li>• Times already found: Satellite of Love (3:37), After Midnight (2:29), Reelin' in the Years (4:35), Friday I'm in Love (3:34), Layla (7:10)</li>
-        </ul>
-      </div>
     </div>
+  </div>
   );
 };
 
