@@ -163,9 +163,9 @@ const SongDurationTracker = () => {
       console.log('Skipped loadFromDatabase because a sync is already in progress');
       return;
     }
-  setIsSyncing(true);
-  isSyncingRef.current = true;
-  syncingStartRef.current = Date.now();
+    setIsSyncing(true);
+    isSyncingRef.current = true;
+    syncingStartRef.current = Date.now();
     console.debug('[DEBUG] loadFromDatabase - set isSyncing true');
     try {
       const dbSongs = await SongService.getAllSongs();
@@ -244,7 +244,7 @@ const SongDurationTracker = () => {
     } finally {
       setIsSyncing(false);
       isSyncingRef.current = false;
-  syncingStartRef.current = null;
+      syncingStartRef.current = null;
       // Safety fallback: ensure syncing flag clears after 20s in case of an unexpected hang
       setTimeout(() => {
         if (isSyncingRef.current) {
@@ -261,16 +261,16 @@ const SongDurationTracker = () => {
   }, []);
 
   const saveToDatabase = useCallback(async () => {
-  console.debug('[DEBUG] saveToDatabase() called');
-  // Prevent overlapping saves
+    console.debug('[DEBUG] saveToDatabase() called');
+    // Prevent overlapping saves
     if (isSyncingRef.current) {
       console.log('Skipped saveToDatabase because a sync is already in progress');
       return;
     }
-  setIsSyncing(true);
+    setIsSyncing(true);
     isSyncingRef.current = true;
     syncingStartRef.current = Date.now();
-  console.debug('[DEBUG] saveToDatabase - set isSyncing true');
+    console.debug('[DEBUG] saveToDatabase - set isSyncing true');
     try {
       // Convert app songs to database format
       const dbSongs: DatabaseSong[] = songs.map(song => ({
@@ -338,8 +338,8 @@ const SongDurationTracker = () => {
   useEffect(() => {
     if (songs.length > 0) {
       const timeoutId = setTimeout(() => {
-  // Avoid triggering auto-save while a manual sync is in progress
-  if (!isSyncingRef.current) saveToDatabase();
+        // Avoid triggering auto-save while a manual sync is in progress
+        if (!isSyncingRef.current) saveToDatabase();
       }, 2000); // Auto-save 2 seconds after changes
 
       return () => clearTimeout(timeoutId);
@@ -496,167 +496,6 @@ const SongDurationTracker = () => {
     }
   };
 
-  // Recreate the correct song structure in database
-  const recreate23Songs = async () => {
-    const correctSongs = [
-      { id: 1, title: "Satellite of Love (Lou Reed) – Live Beck Version", duration: "3:37" },
-      { id: 2, title: "After Midnight – JJ Cale", duration: "2:29" },
-      { id: 3, title: "Reelin' in the Years – Steely Dan", duration: "4:35" },
-      { id: 4, title: "Friday I'm in Love – The Cure", duration: "3:34" },
-      { id: 5, title: "Layla – Original version", duration: "7:10" },
-      { id: 6, title: "Lotta Love – Nicolette Larson", duration: "3:11" },
-      { id: 7, title: "Whose Bed Have Your Boots Been Under", duration: "" },
-      { id: 8, title: "The Perfect Pair - Elica", duration: "" },
-      { id: 9, title: "Our Day Will Come - Laura", duration: "" },
-      { id: 10, title: "Sultans of Swing", duration: "5:48" },
-      { id: 11, title: "Country Roads", duration: "3:13" },
-      { id: 12, title: "Hasn't Hit Me Yet", duration: "" },
-      { id: 13, title: "It's Too Late", duration: "3:53" },
-      { id: 14, title: "Rhinestone Cowboy", duration: "3:15" },
-      { id: 15, title: "Can't Take My Eyes Off You", duration: "3:23" },
-      { id: 16, title: "You'll Never Find Another Love Like Mine", duration: "" },
-      { id: 17, title: "Winners and Losers - Hamilton Joe Frank and Reynolds", duration: "3:00" },
-      { id: 18, title: "He's Not Heavy, He's My Brother", duration: "" },
-      { id: 19, title: "Suspicious Minds", duration: "4:22" },
-      { id: 20, title: "You Got It", duration: "" },
-      { id: 21, title: "Guest 1", duration: "4:00" },
-      { id: 22, title: "Guest 2", duration: "4:00" },
-      { id: 23, title: "Guest 3", duration: "4:00" }
-    ];
-
-    try {
-      // Clear existing songs
-      await supabase.from('songs').delete().neq('id', 0);
-      
-      // First fix the database
-      for (const song of correctSongs) {
-        await supabase.from('songs').upsert({
-          id: song.id,
-          title: song.title,
-          duration: song.duration,
-          players: {
-            electricGuitar: [],
-            acousticGuitar: [],
-            bass: [],
-            vocals: [],
-            backupVocals: []
-          }
-        });
-      }
-      
-      console.log('Your correct song list restored to database');
-      
-      // Now reload from database to update the UI
-      await loadFromDatabase();
-      
-      // Alert the user
-      alert('Original song list has been restored successfully!');
-    } catch (error) {
-      console.error('Error recreating songs:', error);
-      alert('Error restoring song list. See console for details.');
-    }
-  };
-
-  // Fix common data issues in localStorage
-  const fixDataIssues = () => {
-    const updatedSongs = songs.map(song => {
-      let fixedSong = { ...song };
-      
-      // Fix semicolon in duration (3;00 -> 3:00)
-      if (fixedSong.duration && fixedSong.duration.includes(';')) {
-        fixedSong.duration = fixedSong.duration.replace(/;/g, ':');
-        console.log(`Fixed duration for "${fixedSong.title}": "${song.duration}" -> "${fixedSong.duration}"`);
-      }
-      
-      return fixedSong;
-    });
-    
-    setSongs(updatedSongs);
-    localStorage.setItem('songs', JSON.stringify(updatedSongs));
-    alert('Fixed data issues! Duration format corrected.');
-  };
-
-  // Debug function to find invalid durations
-  const debugDurations = () => {
-    console.log('=== DURATION DEBUG ===');
-    const invalidSongs: Song[] = [];
-    const validSongs: Song[] = [];
-    
-    songs.forEach((song: Song) => {
-      if (song.duration && song.duration.trim()) {
-        const [minutes, seconds] = song.duration.split(':').map(Number);
-        if (!isNaN(minutes) && !isNaN(seconds)) {
-          validSongs.push(song);
-          console.log(`✅ Song ${song.id}: "${song.title}" - "${song.duration}" (Valid)`);
-        } else {
-          invalidSongs.push(song);
-          console.log(`❌ Song ${song.id}: "${song.title}" - "${song.duration}" (Invalid format)`);
-        }
-      } else {
-        invalidSongs.push(song);
-        console.log(`⚪ Song ${song.id}: "${song.title}" - "${song.duration}" (Empty)`);
-      }
-    });
-    
-    console.log(`\nSUMMARY:`);
-    console.log(`Total songs: ${songs.length}`);
-    console.log(`Valid durations: ${validSongs.length}`);
-    console.log(`Invalid/Empty durations: ${invalidSongs.length}`);
-    
-    if (invalidSongs.length > 0) {
-      console.log(`\nSongs with issues:`);
-      invalidSongs.forEach(song => {
-        console.log(`- Song ${song.id}: "${song.title}" has duration: "${song.duration}"`);
-      });
-    }
-    
-    alert(`Found ${validSongs.length} valid durations out of ${songs.length} total songs. Check console for details.`);
-  };
-  const smartMigrationTo24Songs = () => {
-    const savedSongs = localStorage.getItem('song-tracker-playlist');
-    if (!savedSongs) return;
-    
-    try {
-      const existingSongs = JSON.parse(savedSongs);
-      console.log('Current songs in localStorage:', existingSongs.length);
-      
-      // Create a map of existing songs by ID for easy lookup
-      const existingSongMap = new Map();
-      existingSongs.forEach((song: any) => {
-        existingSongMap.set(song.id, song);
-      });
-      
-      // Start with the full 24-song default list
-      const fullSongList = [...defaultSongs];
-      
-      // Merge existing data into the full list
-      const mergedSongs = fullSongList.map((defaultSong: Song) => {
-        const existingSong = existingSongMap.get(defaultSong.id);
-        if (existingSong) {
-          // Use existing data (preserves titles, durations, player assignments)
-          return {
-            ...defaultSong,
-            ...existingSong,
-            // Ensure interestedPlayers exists
-            interestedPlayers: existingSong.interestedPlayers || [],
-            // Preserve any players data
-            players: existingSong.players || undefined
-          };
-        }
-        // Use default song if no existing data
-        return defaultSong;
-      });
-      
-      console.log('Merged songs:', mergedSongs.length);
-      setSongs(mergedSongs);
-      alert(`Migration complete! Now have ${mergedSongs.length} songs with all player assignments preserved!`);
-      
-    } catch (error) {
-      console.error('Migration failed:', error);
-      alert('Migration failed. Please try the reset option as backup.');
-    }
-  };
-
   // Calculate total time whenever songs change
   useEffect(() => {
     let totalSeconds = 0;
@@ -682,10 +521,10 @@ const SongDurationTracker = () => {
   }, [songs]);
 
   const updateSong = (id: number, field: string, value: string) => {
-  setSongs(songs.map((song: Song) => 
-    song.id === id ? { ...song, [field]: value } : song
-  ));
-};
+    setSongs(songs.map((song: Song) => 
+      song.id === id ? { ...song, [field]: value } : song
+    ));
+  };
 
   const addSong = () => {
     const newId = Math.max(...songs.map((s: Song) => s.id)) + 1;
@@ -703,18 +542,6 @@ const SongDurationTracker = () => {
     } catch (error) {
       console.error(`Failed to delete song with ID ${id} from database:`, error);
     }
-  };
-
-  // Add a player to a song's interested list
-  const addPlayerToSong = (songId: number, playerName: string) => {
-    console.log('Adding player:', playerName, 'to song:', songId);
-    if (!playerName.trim()) return;
-    
-    setSongs(songs.map((song: Song) => 
-      song.id === songId 
-        ? { ...song, interestedPlayers: [...song.interestedPlayers, playerName.trim()] }
-        : song
-    ));
   };
 
   // Add a player to a specific instrument for a song
@@ -835,76 +662,6 @@ const SongDurationTracker = () => {
     a.download = 'song-playlist.csv';
     a.click();
     window.URL.revokeObjectURL(url);
-  };
-
-  // Export playlist as JSON for sharing
-  const exportToJSON = () => {
-    const playlistData = {
-      exportDate: new Date().toISOString(),
-      totalSongs: songs.length,
-      songs: songs
-    };
-    
-    const jsonContent = JSON.stringify(playlistData, null, 2);
-    const blob = new Blob([jsonContent], { type: 'application/json' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'song-playlist.json';
-    a.click();
-    window.URL.revokeObjectURL(url);
-  };
-
-  // Import playlist from JSON file
-  const importFromJSON = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
-          const content = e.target?.result as string;
-          const data = JSON.parse(content);
-          
-          // Handle different JSON formats
-          let importedSongs;
-          if (data.songs && Array.isArray(data.songs)) {
-            importedSongs = data.songs; // Our export format
-          } else if (Array.isArray(data)) {
-            importedSongs = data; // Simple array format
-          } else {
-            throw new Error('Invalid file format');
-          }
-          
-          // Validate the data has required fields and add missing interestedPlayers
-          const validSongs = importedSongs.filter((song: any) => 
-            song.id && typeof song.title === 'string'
-          ).map((song: any) => ({
-            ...song,
-            interestedPlayers: song.interestedPlayers || []
-          })) as Song[];
-          
-          if (validSongs.length > 0) {
-            setSongs(validSongs);
-            alert(`Successfully imported ${validSongs.length} songs!`);
-          } else {
-            alert('No valid songs found in the file.');
-          }
-        } catch (error) {
-          alert('Error reading file. Please make sure it\'s a valid JSON file.');
-        }
-      };
-      reader.readAsText(file);
-    }
-    // Reset the input
-    event.target.value = '';
-  };
-
-  // Reset to default playlist
-  const resetPlaylist = () => {
-    if (window.confirm('Are you sure you want to reset to the default playlist? This will clear all your changes.')) {
-      setSongs(defaultSongs);
-      localStorage.removeItem('song-tracker-playlist');
-    }
   };
 
   const formatTotalTime = () => {
@@ -1470,3 +1227,4 @@ const SongDurationTracker = () => {
 };
 
 export default SongDurationTracker;
+export {};

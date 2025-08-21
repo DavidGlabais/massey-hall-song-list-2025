@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 
 interface SimpleAuthProps {
   onAuthenticated: () => void;
@@ -7,12 +7,24 @@ interface SimpleAuthProps {
 const SimpleAuth: React.FC<SimpleAuthProps> = ({ onAuthenticated }) => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  // Check if already authenticated on load
+  useEffect(() => {
+    const auth = localStorage.getItem('massey-hall-auth');
+    if (auth === 'authenticated') {
+      setIsAuthenticated(true);
+      onAuthenticated();
+    }
+  }, [onAuthenticated]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Simple password check
     if (password === '2025') {
       localStorage.setItem('massey-hall-auth', 'authenticated');
+      setIsAuthenticated(true);
       onAuthenticated();
     } else {
       setError('Incorrect password. Please try again.');
@@ -20,11 +32,15 @@ const SimpleAuth: React.FC<SimpleAuthProps> = ({ onAuthenticated }) => {
     }
   };
 
+  if (isAuthenticated) {
+    return null; // Don't render anything if authenticated
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
       <div className="bg-slate-800 rounded-lg shadow-2xl p-8 w-full max-w-md border border-slate-700">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-amber-400 mb-2"> Massey Hall</h1>
+          <h1 className="text-3xl font-bold text-amber-400 mb-2">🎵 Massey Hall</h1>
           <h2 className="text-xl text-slate-300 mb-4">Song List 2025</h2>
           <p className="text-slate-400 text-sm">Please enter the password to access the song tracker</p>
         </div>
@@ -61,7 +77,7 @@ const SimpleAuth: React.FC<SimpleAuthProps> = ({ onAuthenticated }) => {
 
         <div className="mt-6 text-center">
           <p className="text-slate-500 text-xs">
-            For band members only  November 15, 2025
+            For band members only • November 15, 2025
           </p>
         </div>
       </div>
