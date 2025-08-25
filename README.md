@@ -1,4 +1,14 @@
-# Getting Started with Create React App
+# Massey Hall Song List 2025
+
+A collaborative song list tracker for the Massey Hall performance on November 15, 2025. Band members can sign up for instruments in real-time.
+
+## 🌐 Access the Application
+
+**Live Application:** [https://davidglabais.github.io/massey-hall-song-list-2025](https://davidglabais.github.io/massey-hall-song-list-2025)
+
+The application is deployed on GitHub Pages and accessible to band members with the appropriate password.
+
+## Getting Started with Development
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
 
@@ -28,6 +38,21 @@ The build is minified and the filenames include the hashes.\
 Your app is ready to be deployed!
 
 See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+
+## 🚀 Deployment
+
+This application is automatically deployed to GitHub Pages at:
+**https://davidglabais.github.io/massey-hall-song-list-2025**
+
+To deploy updates:
+1. Make your changes and commit them
+2. Run `npm run deploy` to build and deploy to GitHub Pages
+
+The deployment uses the `gh-pages` package and is configured in the `package.json` file with the homepage field.
+
+### `npm run deploy`
+
+Builds the app for production and deploys it to GitHub Pages. This combines `npm run build` and `gh-pages -d build`.
 
 ### `npm run eject`
 
