@@ -11,6 +11,7 @@ export interface DatabaseSong {
   id: number;
   title: string;
   duration: string;
+  pdf_url?: string | null;
   players: {
     electricGuitar: string[];
     acousticGuitar: string[];

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Music, Plus, Download, Users, X, Trash2, Guitar, Mic, Database, Cloud, CloudOff, LogOut } from 'lucide-react';
+import { Music, Plus, Download, Users, X, Trash2, Guitar, Mic, Database, Cloud, CloudOff, LogOut, Upload, FileText } from 'lucide-react';
 import { SongService } from './songService';
 import { supabase } from './supabaseClient';
 import type { DatabaseSong } from './supabaseClient';
@@ -10,6 +10,7 @@ interface Song {
   id: number;
   title: string;
   duration: string;
+  pdf_url?: string; // URL for uploaded PDF file
   interestedPlayers: string[]; // Keep existing for migration
   players?: {
     electricGuitar: string[];
@@ -146,14 +147,6 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
   const isSyncingRef = useRef<boolean>(false);
   // Timestamp when the current sync started (ms)
   const syncingStartRef = useRef<number | null>(null);
-
-  // Manual force-clear for stuck syncs
-  const forceClearSync = () => {
-    console.warn('[WARN] forceClearSync() called - clearing syncing flags');
-    isSyncingRef.current = false;
-    syncingStartRef.current = null;
-    setIsSyncing(false);
-  };
 
   // Save to localStorage whenever songs change
   useEffect(() => {
@@ -708,6 +701,164 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
     return `${totalTime.minutes}:${totalTime.seconds.toString().padStart(2, '0')}`;
   };
 
+  // Upload PDF file for a song
+  const uploadPDF = async (songId: number, file: File) => {
+    // Block function if user is not admin
+    if (userRole !== 'admin') {
+      alert('Only admin users can upload PDF files.');
+      return;
+    }
+
+    // Validate file type
+    if (file.type !== 'application/pdf') {
+      alert('Please select a PDF file.');
+      return;
+    }
+
+    // Validate file size (10MB limit)
+    if (file.size > 10 * 1024 * 1024) {
+      alert('PDF file size must be less than 10MB.');
+      return;
+    }
+
+    try {
+      // Create a unique filename
+      const fileName = `song-${songId}-lyrics-${Date.now()}.pdf`;
+      
+      console.log('Uploading PDF:', fileName, 'Size:', file.size);
+      
+      // First, check if bucket exists
+      const { data: buckets, error: bucketError } = await supabase.storage.listBuckets();
+      console.log('Available buckets:', buckets);
+      
+      if (bucketError) {
+        console.error('Bucket list error:', bucketError);
+        alert('Unable to access storage. Please contact the administrator.');
+        return;
+      }
+
+      // Upload to Supabase Storage
+      const { error } = await supabase.storage
+        .from('song-files')
+        .upload(fileName, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
+
+      if (error) {
+        console.error('Upload error:', error);
+        
+        // Handle specific errors
+        if (error.message.includes('Bucket not found')) {
+          alert('Storage bucket "song-files" not found. Please contact the administrator to set up storage.');
+        } else if (error.message.includes('row level security') || error.message.includes('policy')) {
+          alert('Storage permissions not configured. Please contact the administrator.');
+        } else if (error.message.includes('Invalid bucket')) {
+          alert('Invalid storage configuration. Please contact the administrator.');
+        } else {
+          alert(`Upload failed: ${error.message}`);
+        }
+        return;
+      }
+
+      console.log('Upload successful, getting public URL...');
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from('song-files')
+        .getPublicUrl(fileName);
+
+      console.log('Public URL:', urlData.publicUrl);
+
+      // Update song with PDF URL
+      const updatedSongs = songs.map((song: Song) => 
+        song.id === songId ? { ...song, pdf_url: urlData.publicUrl } : song
+      );
+      setSongs(updatedSongs);
+
+      // Update database
+      const songToUpdate = updatedSongs.find(song => song.id === songId);
+      if (songToUpdate) {
+        await SongService.saveSong({
+          id: songToUpdate.id,
+          title: songToUpdate.title,
+          duration: songToUpdate.duration,
+          pdf_url: songToUpdate.pdf_url,
+          players: songToUpdate.players || {
+            electricGuitar: [],
+            acousticGuitar: [],
+            bass: [],
+            vocals: [],
+            backupVocals: []
+          }
+        });
+      }
+
+      alert('PDF uploaded successfully!');
+    } catch (error) {
+      console.error('Upload error:', error);
+      alert('Failed to upload PDF. Please check your internet connection and try again.');
+    }
+  };
+
+  // Delete PDF file for a song
+  const deletePDF = async (songId: number) => {
+    // Block function if user is not admin
+    if (userRole !== 'admin') {
+      alert('Only admin users can delete PDF files.');
+      return;
+    }
+
+    const song = songs.find(s => s.id === songId);
+    if (!song?.pdf_url) return;
+
+    try {
+      // Extract filename from URL
+      const url = new URL(song.pdf_url);
+      const fileName = url.pathname.split('/').pop();
+      
+      if (fileName) {
+        // Delete from Supabase Storage
+        const { error } = await supabase.storage
+          .from('song-files')
+          .remove([fileName]);
+
+        if (error) {
+          console.error('Delete error:', error);
+        }
+      }
+
+      // Update song to remove PDF URL
+      const updatedSongs = songs.map((s: Song) => 
+        s.id === songId ? { ...s, pdf_url: undefined } : s
+      );
+      setSongs(updatedSongs);
+
+      // Update database
+      const songToUpdate = updatedSongs.find(s => s.id === songId);
+      if (songToUpdate) {
+        await SongService.saveSong({
+          id: songToUpdate.id,
+          title: songToUpdate.title,
+          duration: songToUpdate.duration,
+          pdf_url: null,
+          players: songToUpdate.players || {
+            electricGuitar: [],
+            acousticGuitar: [],
+            bass: [],
+            vocals: [],
+            backupVocals: []
+          }
+        });
+      }
+
+      alert('PDF deleted successfully!');
+    } catch (error) {
+      console.error('Delete error:', error);
+      alert('Failed to delete PDF. Please try again.');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
       <div className="max-w-6xl mx-auto p-3 sm:p-4 lg:p-6">
@@ -835,18 +986,65 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                     <td className="px-6 py-4">
                       <div className="space-y-3">
                         {/* Song title input */}
-                        <input
-                          type="text"
-                          value={song.title}
-                          onChange={(e) => updateSong(song.id, 'title', e.target.value)}
-                          readOnly={userRole !== 'admin'}
-                          className={`w-full p-3 text-sm border border-slate-600 rounded-lg text-white placeholder-slate-400 font-medium ${
-                            userRole === 'admin' 
-                              ? 'bg-slate-700/50 focus:ring-2 focus:ring-amber-500 focus:border-amber-500' 
-                              : 'bg-slate-800/60 cursor-not-allowed'
-                          }`}
-                          placeholder="Enter song title..."
-                        />
+                        {/* Song Title Input with Inline PDF Controls */}
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={song.title}
+                            onChange={(e) => updateSong(song.id, 'title', e.target.value)}
+                            readOnly={userRole !== 'admin'}
+                            className={`flex-1 p-3 text-sm border border-slate-600 rounded-lg text-white placeholder-slate-400 font-medium ${
+                              userRole === 'admin' 
+                                ? 'bg-slate-700/50 focus:ring-2 focus:ring-amber-500 focus:border-amber-500' 
+                                : 'bg-slate-800/60 cursor-not-allowed'
+                            }`}
+                            placeholder="Enter song title..."
+                          />
+                          
+                          {/* PDF Controls Inline */}
+                          {song.pdf_url ? (
+                            <>
+                              <a 
+                                href={song.pdf_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-1 px-2 py-1 bg-green-900/60 text-green-200 text-xs rounded border border-green-700/50 hover:bg-green-800/60 transition-colors whitespace-nowrap"
+                                title="View PDF"
+                              >
+                                <FileText className="w-3 h-3" />
+                                <span className="hidden sm:inline">PDF</span>
+                              </a>
+                              {userRole === 'admin' && (
+                                <button
+                                  onClick={() => deletePDF(song.id)}
+                                  className="p-1 text-red-400 hover:text-red-300 hover:bg-red-900/40 rounded transition-colors"
+                                  title="Delete PDF"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              )}
+                            </>
+                          ) : (
+                            userRole === 'admin' && (
+                              <label className="flex items-center gap-1 px-2 py-1 bg-blue-900/60 text-blue-200 text-xs rounded border border-blue-700/50 hover:bg-blue-800/60 transition-colors cursor-pointer whitespace-nowrap" title="Upload PDF">
+                                <Upload className="w-3 h-3" />
+                                <span className="hidden sm:inline">PDF</span>
+                                <input
+                                  type="file"
+                                  accept=".pdf"
+                                  className="hidden"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) {
+                                      uploadPDF(song.id, file);
+                                      e.target.value = ''; // Reset file input
+                                    }
+                                  }}
+                                />
+                              </label>
+                            )
+                          )}
+                        </div>
                         
                         {/* Players section - Sophisticated monochromatic design */}
                         <div className="space-y-3 mt-3">
@@ -1097,18 +1295,64 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
               </div>
               
               {/* Song title */}
-              <input
-                type="text"
-                value={song.title}
-                onChange={(e) => updateSong(song.id, 'title', e.target.value)}
-                readOnly={userRole !== 'admin'}
-                className={`w-full p-3 text-sm border border-slate-600 rounded-lg text-white placeholder-slate-400 font-medium mb-3 ${
-                  userRole === 'admin' 
-                    ? 'bg-slate-700/50 focus:ring-2 focus:ring-amber-500 focus:border-amber-500' 
-                    : 'bg-slate-800/60 cursor-not-allowed'
-                }`}
-                placeholder="Enter song title..."
-              />
+              {/* Song Title Input with PDF Controls Inline - Mobile */}
+              <div className="flex items-center gap-2 mb-3">
+                <input
+                  type="text"
+                  value={song.title}
+                  onChange={(e) => updateSong(song.id, 'title', e.target.value)}
+                  readOnly={userRole !== 'admin'}
+                  className={`flex-1 p-3 text-sm border border-slate-600 rounded-lg text-white placeholder-slate-400 font-medium ${
+                    userRole === 'admin' 
+                      ? 'bg-slate-700/50 focus:ring-2 focus:ring-amber-500 focus:border-amber-500' 
+                      : 'bg-slate-800/60 cursor-not-allowed'
+                  }`}
+                  placeholder="Enter song title..."
+                />
+                
+                {/* PDF Controls Inline - Mobile */}
+                {song.pdf_url ? (
+                  <>
+                    <a 
+                      href={song.pdf_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-center p-2 bg-green-900/60 text-green-200 text-xs rounded border border-green-700/50 hover:bg-green-800/60 transition-colors"
+                      title="View PDF"
+                    >
+                      <FileText className="w-3 h-3" />
+                    </a>
+                    {userRole === 'admin' && (
+                      <button
+                        onClick={() => deletePDF(song.id)}
+                        className="p-2 text-red-400 hover:text-red-300 hover:bg-red-900/40 rounded transition-colors"
+                        title="Delete PDF"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  userRole === 'admin' && (
+                    <label className="flex items-center justify-center p-2 bg-blue-900/60 text-blue-200 text-xs rounded border border-blue-700/50 hover:bg-blue-800/60 transition-colors cursor-pointer" title="Upload PDF">
+                      <Upload className="w-3 h-3" />
+                      <input
+                        type="file"
+                        accept=".pdf"
+                        className="hidden"
+                        title="Upload PDF file"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            uploadPDF(song.id, file);
+                            e.target.value = ''; // Reset file input
+                          }
+                        }}
+                      />
+                    </label>
+                  )
+                )}
+              </div>
               
               {/* Duration */}
               <div className="mb-4">
