@@ -9,26 +9,26 @@ const SimpleAuth: React.FC<SimpleAuthProps> = ({ onAuthenticated }) => {
   const [error, setError] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-  // Check if already authenticated on load
+  // Clear any existing authentication on component mount and ensure fresh login required
   useEffect(() => {
-    const auth = localStorage.getItem('massey-hall-auth');
-    const role = localStorage.getItem('massey-hall-role') as 'viewer' | 'admin';
-    if (auth === 'authenticated' && role) {
-      setIsAuthenticated(true);
-      onAuthenticated(role);
-    }
-  }, [onAuthenticated]);
+    localStorage.clear();
+    setIsAuthenticated(false);
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Get passwords from environment variables
+    const viewerPassword = process.env.REACT_APP_VIEWER_PASSWORD || '2025';
+    const adminPassword = process.env.REACT_APP_ADMIN_PASSWORD || 'admin2025';
+    
     // Check for both viewer and admin passwords
-    if (password === '2025') {
+    if (password === viewerPassword) {
       localStorage.setItem('massey-hall-auth', 'authenticated');
       localStorage.setItem('massey-hall-role', 'viewer');
       setIsAuthenticated(true);
       onAuthenticated('viewer');
-    } else if (password === 'admin2025') {
+    } else if (password === adminPassword) {
       localStorage.setItem('massey-hall-auth', 'authenticated');
       localStorage.setItem('massey-hall-role', 'admin');
       setIsAuthenticated(true);
@@ -88,31 +88,6 @@ const SimpleAuth: React.FC<SimpleAuthProps> = ({ onAuthenticated }) => {
 
         {/* Quick Access Buttons */}
         <div className="mt-6 space-y-3">
-          <div className="text-center text-slate-400 text-xs mb-3">Quick Access:</div>
-          <div className="flex gap-3">
-            <button
-              onClick={() => {
-                localStorage.setItem('massey-hall-auth', 'authenticated');
-                localStorage.setItem('massey-hall-role', 'viewer');
-                setIsAuthenticated(true);
-                onAuthenticated('viewer');
-              }}
-              className="flex-1 bg-blue-700 hover:bg-blue-600 text-white py-2 px-3 rounded-lg transition-colors text-sm"
-            >
-              👀 Viewer Mode
-            </button>
-            <button
-              onClick={() => {
-                localStorage.setItem('massey-hall-auth', 'authenticated');
-                localStorage.setItem('massey-hall-role', 'admin');
-                setIsAuthenticated(true);
-                onAuthenticated('admin');
-              }}
-              className="flex-1 bg-emerald-700 hover:bg-emerald-600 text-white py-2 px-3 rounded-lg transition-colors text-sm"
-            >
-              👑 Admin Mode
-            </button>
-          </div>
         </div>
 
         <div className="mt-6 text-center">

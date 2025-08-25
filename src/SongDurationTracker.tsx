@@ -526,17 +526,35 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
   }, [songs]);
 
   const updateSong = (id: number, field: string, value: string) => {
+    // Block function if user is not admin
+    if (userRole !== 'admin') {
+      alert('Only admin users can edit song details.');
+      return;
+    }
+    
     setSongs(songs.map((song: Song) => 
       song.id === id ? { ...song, [field]: value } : song
     ));
   };
 
   const addSong = () => {
+    // Block function if user is not admin
+    if (userRole !== 'admin') {
+      alert('Only admin users can add songs.');
+      return;
+    }
+    
     const newId = Math.max(...songs.map((s: Song) => s.id)) + 1;
     setSongs([...songs, { id: newId, title: "", duration: "", interestedPlayers: [] }]);
   };
 
   const deleteSong = async (id: number) => {
+    // Block function if user is not admin
+    if (userRole !== 'admin') {
+      alert('Only admin users can delete songs.');
+      return;
+    }
+    
     // Update local state
     setSongs(songs.filter((song: Song) => song.id !== id));
     
@@ -551,6 +569,12 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
 
   // Add a player to a specific instrument for a song
   const addPlayerToInstrument = (songId: number, instrument: string, playerName: string) => {
+    // Block function if user is not admin
+    if (userRole !== 'admin') {
+      alert('Only admin users can add players to instruments.');
+      return;
+    }
+    
     if (!playerName.trim()) return;
     
     // Create a new songs array with the updated song
@@ -605,6 +629,12 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
 
   // Remove a player from a specific instrument
   const removePlayerFromInstrument = (songId: number, instrument: string, playerName: string) => {
+    // Block function if user is not admin
+    if (userRole !== 'admin') {
+      alert('Only admin users can remove players from instruments.');
+      return;
+    }
+    
     // Create a new songs array with the updated song
     const updatedSongs = songs.map((song: Song) => {
       if (song.id !== songId || !song.players) return song;
@@ -709,10 +739,10 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                 <button
                   onClick={onLogout}
                   className="flex items-center gap-1 px-2 py-1 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors text-xs"
-                  title="Logout and switch login"
+                  title="Logout and login as admin"
                 >
                   <LogOut className="w-3 h-3" />
-                  Switch
+                  Admin
                 </button>
               </div>
             </div>
@@ -830,24 +860,28 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                               {song.players?.electricGuitar?.map((player, playerIndex) => (
                                 <span key={playerIndex} className="inline-flex items-center gap-1 px-3 py-1 bg-red-900/40 text-red-200 text-xs rounded-full font-medium border border-red-700/50">
                                   {player}
-                                  <button 
-                                    onClick={() => removePlayerFromInstrument(song.id, 'electricGuitar', player)}
-                                    className="text-red-400 hover:text-red-200 transition-colors"
-                                    title="Remove player"
-                                  >
-                                    <X className="w-3 h-3" />
-                                  </button>
+                                  {userRole === 'admin' && (
+                                    <button 
+                                      onClick={() => removePlayerFromInstrument(song.id, 'electricGuitar', player)}
+                                      className="text-red-400 hover:text-red-200 transition-colors"
+                                      title="Remove player"
+                                    >
+                                      <X className="w-3 h-3" />
+                                    </button>
+                                  )}
                                 </span>
                               ))}
-                              <button 
-                                onClick={() => {
-                                  const name = prompt('Enter player name for Electric Guitar:');
-                                  if (name) addPlayerToInstrument(song.id, 'electricGuitar', name);
-                                }}
-                                className="px-3 py-1 text-red-400 hover:bg-red-900/40 text-xs rounded-full border border-red-700/50 hover:border-red-600 transition-colors font-medium"
-                              >
-                                + Add
-                              </button>
+                              {userRole === 'admin' && (
+                                <button 
+                                  onClick={() => {
+                                    const name = prompt('Enter player name for Electric Guitar:');
+                                    if (name) addPlayerToInstrument(song.id, 'electricGuitar', name);
+                                  }}
+                                  className="px-3 py-1 text-red-400 hover:bg-red-900/40 text-xs rounded-full border border-red-700/50 hover:border-red-600 transition-colors font-medium"
+                                >
+                                  + Add
+                                </button>
+                              )}
                             </div>
                           </div>
 
@@ -859,24 +893,28 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                               {song.players?.acousticGuitar?.map((player, playerIndex) => (
                                 <span key={playerIndex} className="inline-flex items-center gap-1 px-3 py-1 bg-amber-900/40 text-amber-200 text-xs rounded-full font-medium border border-amber-700/50">
                                   {player}
-                                  <button 
-                                    onClick={() => removePlayerFromInstrument(song.id, 'acousticGuitar', player)}
-                                    className="text-amber-400 hover:text-amber-200 transition-colors"
-                                    title="Remove player"
-                                  >
-                                    <X className="w-3 h-3" />
-                                  </button>
+                                  {userRole === 'admin' && (
+                                    <button 
+                                      onClick={() => removePlayerFromInstrument(song.id, 'acousticGuitar', player)}
+                                      className="text-amber-400 hover:text-amber-200 transition-colors"
+                                      title="Remove player"
+                                    >
+                                      <X className="w-3 h-3" />
+                                    </button>
+                                  )}
                                 </span>
                               ))}
-                              <button 
-                                onClick={() => {
-                                  const name = prompt('Enter player name for Acoustic Guitar:');
-                                  if (name) addPlayerToInstrument(song.id, 'acousticGuitar', name);
-                                }}
-                                className="px-3 py-1 text-amber-400 hover:bg-amber-900/40 text-xs rounded-full border border-amber-700/50 hover:border-amber-600 transition-colors font-medium"
-                              >
-                                + Add
-                              </button>
+                              {userRole === 'admin' && (
+                                <button 
+                                  onClick={() => {
+                                    const name = prompt('Enter player name for Acoustic Guitar:');
+                                    if (name) addPlayerToInstrument(song.id, 'acousticGuitar', name);
+                                  }}
+                                  className="px-3 py-1 text-amber-400 hover:bg-amber-900/40 text-xs rounded-full border border-amber-700/50 hover:border-amber-600 transition-colors font-medium"
+                                >
+                                  + Add
+                                </button>
+                              )}
                             </div>
                           </div>
 
@@ -888,24 +926,28 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                               {song.players?.bass?.map((player, playerIndex) => (
                                 <span key={playerIndex} className="inline-flex items-center gap-1 px-3 py-1 bg-purple-900/40 text-purple-200 text-xs rounded-full font-medium border border-purple-700/50">
                                   {player}
-                                  <button 
-                                    onClick={() => removePlayerFromInstrument(song.id, 'bass', player)}
-                                    className="text-purple-400 hover:text-purple-200 transition-colors"
-                                    title="Remove player"
-                                  >
-                                    <X className="w-3 h-3" />
-                                  </button>
+                                  {userRole === 'admin' && (
+                                    <button 
+                                      onClick={() => removePlayerFromInstrument(song.id, 'bass', player)}
+                                      className="text-purple-400 hover:text-purple-200 transition-colors"
+                                      title="Remove player"
+                                    >
+                                      <X className="w-3 h-3" />
+                                    </button>
+                                  )}
                                 </span>
                               ))}
-                              <button 
-                                onClick={() => {
-                                  const name = prompt('Enter player name for Bass:');
-                                  if (name) addPlayerToInstrument(song.id, 'bass', name);
-                                }}
-                                className="px-3 py-1 text-purple-400 hover:bg-purple-900/40 text-xs rounded-full border border-purple-700/50 hover:border-purple-600 transition-colors font-medium"
-                              >
-                                + Add
-                              </button>
+                              {userRole === 'admin' && (
+                                <button 
+                                  onClick={() => {
+                                    const name = prompt('Enter player name for Bass:');
+                                    if (name) addPlayerToInstrument(song.id, 'bass', name);
+                                  }}
+                                  className="px-3 py-1 text-purple-400 hover:bg-purple-900/40 text-xs rounded-full border border-purple-700/50 hover:border-purple-600 transition-colors font-medium"
+                                >
+                                  + Add
+                                </button>
+                              )}
                             </div>
                           </div>
 
@@ -917,24 +959,28 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                               {song.players?.vocals?.map((player, playerIndex) => (
                                 <span key={playerIndex} className="inline-flex items-center gap-1 px-3 py-1 bg-blue-900/40 text-blue-200 text-xs rounded-full font-medium border border-blue-700/50">
                                   {player}
-                                  <button 
-                                    onClick={() => removePlayerFromInstrument(song.id, 'vocals', player)}
-                                    className="text-blue-400 hover:text-blue-200 transition-colors"
-                                    title="Remove player"
-                                  >
-                                    <X className="w-3 h-3" />
-                                  </button>
+                                  {userRole === 'admin' && (
+                                    <button 
+                                      onClick={() => removePlayerFromInstrument(song.id, 'vocals', player)}
+                                      className="text-blue-400 hover:text-blue-200 transition-colors"
+                                      title="Remove player"
+                                    >
+                                      <X className="w-3 h-3" />
+                                    </button>
+                                  )}
                                 </span>
                               ))}
-                              <button 
-                                onClick={() => {
-                                  const name = prompt('Enter player name for Vocals:');
-                                  if (name) addPlayerToInstrument(song.id, 'vocals', name);
-                                }}
-                                className="px-3 py-1 text-blue-400 hover:bg-blue-900/40 text-xs rounded-full border border-blue-700/50 hover:border-blue-600 transition-colors font-medium"
-                              >
-                                + Add
-                              </button>
+                              {userRole === 'admin' && (
+                                <button 
+                                  onClick={() => {
+                                    const name = prompt('Enter player name for Vocals:');
+                                    if (name) addPlayerToInstrument(song.id, 'vocals', name);
+                                  }}
+                                  className="px-3 py-1 text-blue-400 hover:bg-blue-900/40 text-xs rounded-full border border-blue-700/50 hover:border-blue-600 transition-colors font-medium"
+                                >
+                                  + Add
+                                </button>
+                              )}
                             </div>
                           </div>
 
@@ -946,24 +992,28 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                               {song.players?.backupVocals?.map((player, playerIndex) => (
                                 <span key={playerIndex} className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-900/40 text-emerald-200 text-xs rounded-full font-medium border border-emerald-700/50">
                                   {player}
-                                  <button 
-                                    onClick={() => removePlayerFromInstrument(song.id, 'backupVocals', player)}
-                                    className="text-emerald-400 hover:text-emerald-200 transition-colors"
-                                    title="Remove player"
-                                  >
-                                    <X className="w-3 h-3" />
-                                  </button>
+                                  {userRole === 'admin' && (
+                                    <button 
+                                      onClick={() => removePlayerFromInstrument(song.id, 'backupVocals', player)}
+                                      className="text-emerald-400 hover:text-emerald-200 transition-colors"
+                                      title="Remove player"
+                                    >
+                                      <X className="w-3 h-3" />
+                                    </button>
+                                  )}
                                 </span>
                               ))}
-                              <button 
-                                onClick={() => {
-                                  const name = prompt('Enter player name for Backup Vocals:');
-                                  if (name) addPlayerToInstrument(song.id, 'backupVocals', name);
-                                }}
-                                className="px-3 py-1 text-emerald-400 hover:bg-emerald-900/40 text-xs rounded-full border border-emerald-700/50 hover:border-emerald-600 transition-colors font-medium"
-                              >
-                                + Add
-                              </button>
+                              {userRole === 'admin' && (
+                                <button 
+                                  onClick={() => {
+                                    const name = prompt('Enter player name for Backup Vocals:');
+                                    if (name) addPlayerToInstrument(song.id, 'backupVocals', name);
+                                  }}
+                                  className="px-3 py-1 text-emerald-400 hover:bg-emerald-900/40 text-xs rounded-full border border-emerald-700/50 hover:border-emerald-600 transition-colors font-medium"
+                                >
+                                  + Add
+                                </button>
+                              )}
                             </div>
                           </div>
 
@@ -1101,15 +1151,17 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                         </button>
                       </span>
                     ))}
-                    <button 
-                      onClick={() => {
-                        const name = prompt('Enter player name for Electric Guitar:');
-                        if (name) addPlayerToInstrument(song.id, 'electricGuitar', name);
-                      }}
-                      className="px-3 py-1 text-red-400 hover:bg-red-900/40 text-xs rounded-full border border-red-700/50 hover:border-red-600 transition-colors font-medium"
-                    >
-                      + Add
-                    </button>
+                    {userRole === 'admin' && (
+                      <button 
+                        onClick={() => {
+                          const name = prompt('Enter player name for Electric Guitar:');
+                          if (name) addPlayerToInstrument(song.id, 'electricGuitar', name);
+                        }}
+                        className="px-3 py-1 text-red-400 hover:bg-red-900/40 text-xs rounded-full border border-red-700/50 hover:border-red-600 transition-colors font-medium"
+                      >
+                        + Add
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -1123,24 +1175,28 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                     {song.players?.acousticGuitar?.map((player, playerIndex) => (
                       <span key={playerIndex} className="inline-flex items-center gap-1 px-3 py-1 bg-amber-900/40 text-amber-200 text-xs rounded-full font-medium border border-amber-700/50">
                         {player}
-                        <button 
-                          onClick={() => removePlayerFromInstrument(song.id, 'acousticGuitar', player)}
-                          className="text-amber-400 hover:text-amber-200 transition-colors"
-                          title="Remove player"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
+                        {userRole === 'admin' && (
+                          <button 
+                            onClick={() => removePlayerFromInstrument(song.id, 'acousticGuitar', player)}
+                            className="text-amber-400 hover:text-amber-200 transition-colors"
+                            title="Remove player"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        )}
                       </span>
                     ))}
-                    <button 
-                      onClick={() => {
-                        const name = prompt('Enter player name for Acoustic Guitar:');
-                        if (name) addPlayerToInstrument(song.id, 'acousticGuitar', name);
-                      }}
-                      className="px-3 py-1 text-amber-400 hover:bg-amber-900/40 text-xs rounded-full border border-amber-700/50 hover:border-amber-600 transition-colors font-medium"
-                    >
-                      + Add
-                    </button>
+                    {userRole === 'admin' && (
+                      <button 
+                        onClick={() => {
+                          const name = prompt('Enter player name for Acoustic Guitar:');
+                          if (name) addPlayerToInstrument(song.id, 'acousticGuitar', name);
+                        }}
+                        className="px-3 py-1 text-amber-400 hover:bg-amber-900/40 text-xs rounded-full border border-amber-700/50 hover:border-amber-600 transition-colors font-medium"
+                      >
+                        + Add
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -1154,13 +1210,15 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                     {song.players?.bass?.map((player, playerIndex) => (
                       <span key={playerIndex} className="inline-flex items-center gap-1 px-3 py-1 bg-purple-900/40 text-purple-200 text-xs rounded-full font-medium border border-purple-700/50">
                         {player}
-                        <button 
-                          onClick={() => removePlayerFromInstrument(song.id, 'bass', player)}
-                          className="text-purple-400 hover:text-purple-200 transition-colors"
-                          title="Remove player"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
+                        {userRole === 'admin' && (
+                          <button 
+                            onClick={() => removePlayerFromInstrument(song.id, 'bass', player)}
+                            className="text-purple-400 hover:text-purple-200 transition-colors"
+                            title="Remove player"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        )}
                       </span>
                     ))}
                     <button 
@@ -1185,13 +1243,15 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                     {song.players?.vocals?.map((player, playerIndex) => (
                       <span key={playerIndex} className="inline-flex items-center gap-1 px-3 py-1 bg-blue-900/40 text-blue-200 text-xs rounded-full font-medium border border-blue-700/50">
                         {player}
-                        <button 
-                          onClick={() => removePlayerFromInstrument(song.id, 'vocals', player)}
-                          className="text-blue-400 hover:text-blue-200 transition-colors"
-                          title="Remove player"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
+                        {userRole === 'admin' && (
+                          <button 
+                            onClick={() => removePlayerFromInstrument(song.id, 'vocals', player)}
+                            className="text-blue-400 hover:text-blue-200 transition-colors"
+                            title="Remove player"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        )}
                       </span>
                     ))}
                     <button 
@@ -1216,13 +1276,15 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                     {song.players?.backupVocals?.map((player, playerIndex) => (
                       <span key={playerIndex} className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-900/40 text-emerald-200 text-xs rounded-full font-medium border border-emerald-700/50">
                         {player}
-                        <button 
-                          onClick={() => removePlayerFromInstrument(song.id, 'backupVocals', player)}
-                          className="text-emerald-400 hover:text-emerald-200 transition-colors"
-                          title="Remove player"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
+                        {userRole === 'admin' && (
+                          <button 
+                            onClick={() => removePlayerFromInstrument(song.id, 'backupVocals', player)}
+                            className="text-emerald-400 hover:text-emerald-200 transition-colors"
+                            title="Remove player"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        )}
                       </span>
                     ))}
                     <button 
