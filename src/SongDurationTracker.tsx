@@ -147,13 +147,7 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
   // Timestamp when the current sync started (ms)
   const syncingStartRef = useRef<number | null>(null);
 
-  // Manual force-clear for stuck syncs
-  const forceClearSync = () => {
-    console.warn('[WARN] forceClearSync() called - clearing syncing flags');
-    isSyncingRef.current = false;
-    syncingStartRef.current = null;
-    setIsSyncing(false);
-  };
+
 
   // Save to localStorage whenever songs change
   useEffect(() => {

@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import SimpleAuth from './components/SimpleAuth';
 import SongDurationTracker from './SongDurationTracker';
 
