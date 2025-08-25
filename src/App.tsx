@@ -4,18 +4,29 @@ import SongDurationTracker from './SongDurationTracker';
 
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [userRole, setUserRole] = useState<'viewer' | 'admin'>('viewer');
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const auth = localStorage.getItem('massey-hall-auth');
-    if (auth === 'authenticated') {
+    const role = localStorage.getItem('massey-hall-role') as 'viewer' | 'admin';
+    if (auth === 'authenticated' && role) {
       setIsAuthenticated(true);
+      setUserRole(role);
     }
     setIsLoading(false);
   }, []);
 
-  const handleAuthenticated = () => {
+  const handleAuthenticated = (role: 'viewer' | 'admin') => {
     setIsAuthenticated(true);
+    setUserRole(role);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('massey-hall-auth');
+    localStorage.removeItem('massey-hall-role');
+    setIsAuthenticated(false);
+    setUserRole('viewer');
   };
 
   if (isLoading) {
@@ -33,7 +44,7 @@ const App: React.FC = () => {
     return <SimpleAuth onAuthenticated={handleAuthenticated} />;
   }
 
-  return <SongDurationTracker />;
+  return <SongDurationTracker userRole={userRole} onLogout={handleLogout} />;
 };
 
 export default App;

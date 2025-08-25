@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Music, Plus, Download, Users, X, Trash2, Guitar, Mic, Database, Cloud, CloudOff } from 'lucide-react';
+import { Music, Plus, Download, Users, X, Trash2, Guitar, Mic, Database, Cloud, CloudOff, LogOut } from 'lucide-react';
 import { SongService } from './songService';
 import { supabase } from './supabaseClient';
 import type { DatabaseSong } from './supabaseClient';
@@ -57,7 +57,12 @@ const checkForRealChanges = (currentSongs: any[], updatedSongs: any[]): boolean 
   return false;
 };
 
-const SongDurationTracker = () => {
+interface SongDurationTrackerProps {
+  userRole: 'viewer' | 'admin';
+  onLogout: () => void;
+}
+
+const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onLogout }) => {
   // Default songs to use if no saved data
   const defaultSongs: Song[] = [
     { id: 1, title: "Satellite of Love (Lou Reed) – Live Beck Version", duration: "3:37", interestedPlayers: [] },
@@ -692,7 +697,24 @@ const SongDurationTracker = () => {
             </div>
             <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
               <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">Massey Hall Song List</h1>
-              <span className="text-sm sm:text-lg text-amber-400 font-medium">November 15, 2025</span>
+              <div className="flex items-center gap-3">
+                <span className="text-sm sm:text-lg text-amber-400 font-medium">November 15, 2025</span>
+                <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                  userRole === 'admin' 
+                    ? 'bg-emerald-900/60 text-emerald-300 border border-emerald-600' 
+                    : 'bg-blue-900/60 text-blue-300 border border-blue-600'
+                }`}>
+                  {userRole === 'admin' ? '👑 Admin' : '👀 Viewer'}
+                </span>
+                <button
+                  onClick={onLogout}
+                  className="flex items-center gap-1 px-2 py-1 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors text-xs"
+                  title="Logout and switch login"
+                >
+                  <LogOut className="w-3 h-3" />
+                  Switch
+                </button>
+              </div>
             </div>
           </div>
           
@@ -733,13 +755,15 @@ const SongDurationTracker = () => {
             
             <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
               {/* Primary Controls */}
-              <button
-                onClick={addSong}
-                className="flex items-center justify-center gap-2 px-4 sm:px-5 py-2 sm:py-3 bg-gradient-to-r from-emerald-600 to-emerald-700 text-white rounded-xl hover:from-emerald-700 hover:to-emerald-800 transition-all duration-200 shadow-lg hover:shadow-xl font-medium border border-emerald-500 text-sm sm:text-base"
-              >
-                <Plus className="w-3 h-3 sm:w-4 sm:h-4" />
-                Add Song
-              </button>
+              {userRole === 'admin' && (
+                <button
+                  onClick={addSong}
+                  className="flex items-center justify-center gap-2 px-4 sm:px-5 py-2 sm:py-3 bg-gradient-to-r from-emerald-600 to-emerald-700 text-white rounded-xl hover:from-emerald-700 hover:to-emerald-800 transition-all duration-200 shadow-lg hover:shadow-xl font-medium border border-emerald-500 text-sm sm:text-base"
+                >
+                  <Plus className="w-3 h-3 sm:w-4 sm:h-4" />
+                  Add Song
+                </button>
+              )}
               <button
                 onClick={loadFromDatabase}
                 disabled={isSyncing}
@@ -785,7 +809,12 @@ const SongDurationTracker = () => {
                           type="text"
                           value={song.title}
                           onChange={(e) => updateSong(song.id, 'title', e.target.value)}
-                          className="w-full p-3 text-sm bg-slate-700/50 border border-slate-600 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-white placeholder-slate-400 font-medium"
+                          readOnly={userRole !== 'admin'}
+                          className={`w-full p-3 text-sm border border-slate-600 rounded-lg text-white placeholder-slate-400 font-medium ${
+                            userRole === 'admin' 
+                              ? 'bg-slate-700/50 focus:ring-2 focus:ring-amber-500 focus:border-amber-500' 
+                              : 'bg-slate-800/60 cursor-not-allowed'
+                          }`}
                           placeholder="Enter song title..."
                         />
                         
@@ -973,19 +1002,26 @@ const SongDurationTracker = () => {
                       type="text"
                       value={song.duration}
                       onChange={(e) => updateSong(song.id, 'duration', e.target.value)}
-                      className="w-full p-2 text-sm bg-slate-700/50 border border-slate-600 rounded focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-white placeholder-slate-400"
+                      readOnly={userRole !== 'admin'}
+                      className={`w-full p-2 text-sm border border-slate-600 rounded text-white placeholder-slate-400 ${
+                        userRole === 'admin' 
+                          ? 'bg-slate-700/50 focus:ring-2 focus:ring-amber-500 focus:border-amber-500' 
+                          : 'bg-slate-800/60 cursor-not-allowed'
+                      }`}
                       placeholder="4:35"
                       pattern="[0-9]+:[0-5][0-9]"
                     />
                   </td>
                   <td className="px-4 py-3 text-center">
-                    <button
-                      onClick={() => deleteSong(song.id)}
-                      className="p-2 text-red-400 hover:text-red-300 hover:bg-red-900/40 rounded-lg transition-colors"
-                      title="Delete song"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {userRole === 'admin' && (
+                      <button
+                        onClick={() => deleteSong(song.id)}
+                        className="p-2 text-red-400 hover:text-red-300 hover:bg-red-900/40 rounded-lg transition-colors"
+                        title="Delete song"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -999,13 +1035,15 @@ const SongDurationTracker = () => {
             <div key={song.id} className="bg-slate-700/60 border border-slate-600 rounded-xl p-4 shadow-lg">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-sm font-semibold text-amber-400">Song #{index + 1}</span>
-                <button
-                  onClick={() => deleteSong(song.id)}
-                  className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-900/40 rounded-lg transition-colors"
-                  title="Delete song"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                {userRole === 'admin' && (
+                  <button
+                    onClick={() => deleteSong(song.id)}
+                    className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-900/40 rounded-lg transition-colors"
+                    title="Delete song"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
               </div>
               
               {/* Song title */}
@@ -1013,7 +1051,12 @@ const SongDurationTracker = () => {
                 type="text"
                 value={song.title}
                 onChange={(e) => updateSong(song.id, 'title', e.target.value)}
-                className="w-full p-3 text-sm bg-slate-700/50 border border-slate-600 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-white placeholder-slate-400 font-medium mb-3"
+                readOnly={userRole !== 'admin'}
+                className={`w-full p-3 text-sm border border-slate-600 rounded-lg text-white placeholder-slate-400 font-medium mb-3 ${
+                  userRole === 'admin' 
+                    ? 'bg-slate-700/50 focus:ring-2 focus:ring-amber-500 focus:border-amber-500' 
+                    : 'bg-slate-800/60 cursor-not-allowed'
+                }`}
                 placeholder="Enter song title..."
               />
               
@@ -1024,7 +1067,12 @@ const SongDurationTracker = () => {
                   type="text"
                   value={song.duration}
                   onChange={(e) => updateSong(song.id, 'duration', e.target.value)}
-                  className="w-full p-2 text-sm bg-slate-700/50 border border-slate-600 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-white placeholder-slate-400"
+                  readOnly={userRole !== 'admin'}
+                  className={`w-full p-2 text-sm border border-slate-600 rounded-lg text-white placeholder-slate-400 ${
+                    userRole === 'admin' 
+                      ? 'bg-slate-700/50 focus:ring-2 focus:ring-amber-500 focus:border-amber-500' 
+                      : 'bg-slate-800/60 cursor-not-allowed'
+                  }`}
                   placeholder="4:35"
                   pattern="[0-9]+:[0-5][0-9]"
                 />
