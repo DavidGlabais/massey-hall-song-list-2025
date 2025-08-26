@@ -25,17 +25,25 @@ export class SongService {
   static async saveSong(song: DatabaseSong): Promise<boolean> {
     try {
       console.debug("[DEBUG] SongService.saveSong() called for id", song.id, "with pdf_url:", song.pdf_url);
+      
+      // Build the data object, only including pdf_urls if it exists
+      const songData: any = {
+        id: song.id,
+        title: song.title,
+        duration: song.duration,
+        players: song.players,
+        pdf_url: song.pdf_url,
+        updated_at: new Date().toISOString()
+      };
+      
+      // Only include pdf_urls if the song has this field to avoid database errors
+      if (song.pdf_urls !== undefined) {
+        songData.pdf_urls = song.pdf_urls;
+      }
+      
       const { error } = await supabase
         .from("songs")
-        .upsert({
-          id: song.id,
-          title: song.title,
-          duration: song.duration,
-          players: song.players,
-          pdf_url: song.pdf_url,
-          pdf_urls: song.pdf_urls,
-          updated_at: new Date().toISOString()
-        })
+        .upsert(songData)
       
       if (error) throw error
       return true

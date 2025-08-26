@@ -767,12 +767,21 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
         title: songToUpdate.title,
         duration: songToUpdate.duration,
         players: songToUpdate.players,
-        pdf_url: songToUpdate.pdf_url || null,
-        pdf_urls: songToUpdate.pdf_urls
-      }).then(() => {
-        setTimeout(() => {
-          loadFromDatabase();
-        }, 300);
+        pdf_url: songToUpdate.pdf_url || null
+        // Note: Intentionally omitting pdf_urls to avoid database error
+      }).then((success) => {
+        if (success) {
+          console.log('✅ Successfully saved song, reloading from database');
+          setTimeout(() => {
+            loadFromDatabase();
+          }, 300);
+        } else {
+          console.error('❌ Failed to save song, keeping local changes');
+          // Don't reload from database if save failed
+        }
+      }).catch((error) => {
+        console.error('❌ Error saving song:', error);
+        // Don't reload from database if save failed
       });
     }
   };
@@ -809,12 +818,21 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
         title: songToUpdate.title,
         duration: songToUpdate.duration,
         players: songToUpdate.players,
-        pdf_url: songToUpdate.pdf_url || null,
-        pdf_urls: songToUpdate.pdf_urls
-      }).then(() => {
-        setTimeout(() => {
-          loadFromDatabase();
-        }, 300);
+        pdf_url: songToUpdate.pdf_url || null
+        // Note: Intentionally omitting pdf_urls to avoid database error
+      }).then((success) => {
+        if (success) {
+          console.log('✅ Successfully saved song, reloading from database');
+          setTimeout(() => {
+            loadFromDatabase();
+          }, 300);
+        } else {
+          console.error('❌ Failed to save song, keeping local changes');
+          // Don't reload from database if save failed
+        }
+      }).catch((error) => {
+        console.error('❌ Error saving song:', error);
+        // Don't reload from database if save failed
       });
     }
   };
