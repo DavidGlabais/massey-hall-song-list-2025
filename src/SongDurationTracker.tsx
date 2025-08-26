@@ -905,31 +905,34 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                 <div className="text-xs sm:text-sm text-slate-300">{totalTime.songsWithTime} of {songs.length} songs timed</div>
               </div>
               
-              <div className={`border rounded-xl p-4 sm:p-5 shadow-xl backdrop-blur ${isOnline ? 'bg-emerald-900/80 border-emerald-600' : 'bg-red-900/80 border-red-600'}`}>
-                <div className="flex items-center gap-2 text-xs sm:text-sm font-semibold">
-                  {isSyncing ? (
-                    <>
-                      <div className="animate-spin w-3 h-3 sm:w-4 sm:h-4 border-2 border-amber-400 border-t-transparent rounded-full"></div>
-                      <span className="text-amber-400">Syncing...</span>
-                    </>
-                  ) : isOnline ? (
-                    <>
-                      <Cloud className="w-3 h-3 sm:w-4 sm:h-4 text-emerald-400" />
-                      <span className="text-emerald-400">Online</span>
-                    </>
-                  ) : (
-                    <>
-                      <CloudOff className="w-3 h-3 sm:w-4 sm:h-4 text-red-400" />
-                      <span className="text-red-400">Offline</span>
-                    </>
+              {/* Online indicator - admin only */}
+              {userRole === 'admin' && (
+                <div className={`border rounded-xl p-4 sm:p-5 shadow-xl backdrop-blur ${isOnline ? 'bg-emerald-900/80 border-emerald-600' : 'bg-red-900/80 border-red-600'}`}>
+                  <div className="flex items-center gap-2 text-xs sm:text-sm font-semibold">
+                    {isSyncing ? (
+                      <>
+                        <div className="animate-spin w-3 h-3 sm:w-4 sm:h-4 border-2 border-amber-400 border-t-transparent rounded-full"></div>
+                        <span className="text-amber-400">Syncing...</span>
+                      </>
+                    ) : isOnline ? (
+                      <>
+                        <Cloud className="w-3 h-3 sm:w-4 sm:h-4 text-emerald-400" />
+                        <span className="text-emerald-400">Online</span>
+                      </>
+                    ) : (
+                      <>
+                        <CloudOff className="w-3 h-3 sm:w-4 sm:h-4 text-red-400" />
+                        <span className="text-red-400">Offline</span>
+                      </>
+                    )}
+                  </div>
+                  {lastSynced && (
+                    <div className="text-xs text-slate-400 mt-1">
+                      Last synced: {lastSynced.toLocaleTimeString()}
+                    </div>
                   )}
                 </div>
-                {lastSynced && (
-                  <div className="text-xs text-slate-400 mt-1">
-                    Last synced: {lastSynced.toLocaleTimeString()}
-                  </div>
-                )}
-              </div>
+              )}
             </div>
             
             <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
@@ -943,14 +946,17 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                   Add Song
                 </button>
               )}
-              <button
-                onClick={loadFromDatabase}
-                disabled={isSyncing}
-                className="flex items-center justify-center gap-2 px-4 sm:px-5 py-2 sm:py-3 bg-gradient-to-r from-amber-600 to-orange-600 text-white rounded-xl hover:from-amber-700 hover:to-orange-700 transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed font-medium border border-amber-500 text-sm sm:text-base"
-              >
-                <Database className="w-3 h-3 sm:w-4 sm:h-4" />
-                Sync Now
-              </button>
+              {/* Sync Now button - admin only */}
+              {userRole === 'admin' && (
+                <button
+                  onClick={loadFromDatabase}
+                  disabled={isSyncing}
+                  className="flex items-center justify-center gap-2 px-4 sm:px-5 py-2 sm:py-3 bg-gradient-to-r from-amber-600 to-orange-600 text-white rounded-xl hover:from-amber-700 hover:to-orange-700 transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed font-medium border border-amber-500 text-sm sm:text-base"
+                >
+                  <Database className="w-3 h-3 sm:w-4 sm:h-4" />
+                  Sync Now
+                </button>
+              )}
               <button
                 onClick={exportToCSV}
                 title="Export to Google Sheets, Excel, or print"
