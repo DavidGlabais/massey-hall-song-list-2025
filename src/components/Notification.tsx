@@ -3,7 +3,7 @@ import { Info } from 'lucide-react';
 
 interface NotificationProps {
   message: string;
-  onConfirm?: () => void;
+  onConfirm: () => void;
   onClose: () => void;
 }
 
