@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Music, Plus, Download, Users, X, Trash2, Guitar, Mic, Database, Cloud, CloudOff, LogOut, Upload, FileText } from 'lucide-react';
+import { Music, Plus, Download, Users, X, Trash2, Guitar, Mic, Database, Cloud, CloudOff, LogOut } from 'lucide-react';
 import { SongService } from './songService';
 import { supabase } from './supabaseClient';
 import type { DatabaseSong } from './supabaseClient';
@@ -10,7 +10,6 @@ interface Song {
   id: number;
   title: string;
   duration: string;
-  pdf_url?: string; // URL for uploaded PDF file
   interestedPlayers: string[]; // Keep existing for migration
   players?: {
     electricGuitar: string[];
@@ -19,7 +18,43 @@ interface Song {
     vocals: string[];
     backupVocals: string[];
   };
+  pdf_url?: string | null; // Keep for backward compatibility
+  pdf_urls?: string[]; // New field for multiple PDFs
 }
+
+// Helper function to get all PDF URLs for a song (backward compatibility)
+const getSongPdfUrls = (song: Song): string[] => {
+  const urls: string[] = [];
+  
+  // Add URLs from new format
+  if (song.pdf_urls && song.pdf_urls.length > 0) {
+    urls.push(...song.pdf_urls);
+  }
+  
+  // Add URL from legacy format if not already included
+  if (song.pdf_url && !urls.includes(song.pdf_url)) {
+    urls.push(song.pdf_url);
+  }
+  
+  return urls;
+};
+
+// Helper function for database songs
+const getDbSongPdfUrls = (song: DatabaseSong): string[] => {
+  const urls: string[] = [];
+  
+  // Add URLs from new format
+  if (song.pdf_urls && song.pdf_urls.length > 0) {
+    urls.push(...song.pdf_urls);
+  }
+  
+  // Add URL from legacy format if not already included
+  if (song.pdf_url && !urls.includes(song.pdf_url)) {
+    urls.push(song.pdf_url);
+  }
+  
+  return urls;
+};
 
 // Helper function to check if there are meaningful changes between the current songs and updated songs
 const checkForRealChanges = (currentSongs: any[], updatedSongs: any[]): boolean => {
@@ -46,6 +81,13 @@ const checkForRealChanges = (currentSongs: any[], updatedSongs: any[]): boolean 
     // Check title and duration
     if (currentSong.title !== updatedSong.title || currentSong.duration !== updatedSong.duration) {
       return true;
+    }
+
+    // Check PDF URLs - if we have local PDF URLs, don't consider it a change from the server
+    const currentPdfUrls = getSongPdfUrls(currentSong);
+    const updatedPdfUrls = getSongPdfUrls(updatedSong);
+    if (currentPdfUrls.length > 0 && updatedPdfUrls.length === 0) {
+      return false;
     }
     
     // Check player assignments (more complex comparison)
@@ -148,6 +190,14 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
   // Timestamp when the current sync started (ms)
   const syncingStartRef = useRef<number | null>(null);
 
+  // Manual force-clear for stuck syncs
+  const forceClearSync = () => {
+    console.warn('[WARN] forceClearSync() called - clearing syncing flags');
+    isSyncingRef.current = false;
+    syncingStartRef.current = null;
+    setIsSyncing(false);
+  };
+
   // Save to localStorage whenever songs change
   useEffect(() => {
     localStorage.setItem('song-tracker-playlist', JSON.stringify(songs));
@@ -228,7 +278,9 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
           title: dbSong.title,
           duration: dbSong.duration,
           interestedPlayers: [], // Keep for legacy compatibility
-          players: dbSong.players
+          players: dbSong.players,
+          pdf_url: dbSong.pdf_url,
+          pdf_urls: dbSong.pdf_urls || []
         }));
         
         setSongs(convertedSongs);
@@ -281,7 +333,8 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
           bass: [],
           vocals: [],
           backupVocals: []
-        }
+        },
+        pdf_url: song.pdf_url
       }));
       
       const success = await SongService.saveAllSongs(dbSongs);
@@ -344,6 +397,9 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
     }
   }, [songs, saveToDatabase]);
 
+  // Track the last time we made a change locally
+  const lastLocalChangeRef = useRef(Date.now());
+
   // Load from database on component mount
   useEffect(() => {
     loadFromDatabase();
@@ -352,14 +408,17 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
 
   // Set up real-time subscription with smarter handling
   useEffect(() => {
-    const subscription = SongService.subscribeToChanges((updatedSongs) => {
-      // Only update if we receive a different set of songs (prevents overwriting local changes)
-      console.log('Received real-time update, checking if update is needed...');
-      
-      // Don't automatically apply every update - this can cause local changes to be lost
-      // Instead, show a notification or apply only if confirmed
-      if (isOnline) {
+    const subscription = SongService.subscribeToChanges((updatedSongs: DatabaseSong[]) => {
+      // Only process updates when we're online and not currently syncing
+      if (isOnline && !isSyncingRef.current) {
         const now = Date.now();
+        
+        // If this update is too soon after our own change, ignore it
+        if (now - lastLocalChangeRef.current < 5000) {
+          console.debug('[DEBUG] Ignoring real-time update - too soon after local change');
+          return;
+        }
+        
         // Prevent notification spam - only show once every 30 seconds
         if (now - lastNotificationRef.current > 30000) {
           lastNotificationRef.current = now;
@@ -368,28 +427,38 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
           const hasChanges = checkForRealChanges(songs, updatedSongs);
           
           if (hasChanges) {
-            // Use non-blocking notification instead of window.confirm
+            // Create a merged version that preserves local PDF URLs
+            const mergedSongs = updatedSongs.map(dbSong => {
+              const currentSong = songs.find(s => s.id === dbSong.id);
+              const currentPdfUrls = currentSong ? getSongPdfUrls(currentSong) : [];
+              const dbPdfUrls = getDbSongPdfUrls(dbSong);
+              
+              // Merge PDF URLs, keeping local ones first
+              const urlSet = new Set([...currentPdfUrls, ...dbPdfUrls]);
+              const mergedPdfUrls = Array.from(urlSet);
+              
+              return {
+                id: dbSong.id,
+                title: dbSong.title,
+                duration: dbSong.duration,
+                interestedPlayers: [],
+                players: dbSong.players,
+                // Keep local PDF URL if it exists
+                pdf_url: currentSong?.pdf_url || dbSong.pdf_url,
+                pdf_urls: mergedPdfUrls
+              };
+            });
+
+            // Only show notification if we're not the ones who made the change
             setNotification({
-              message: 'New changes detected in the database. Load the latest data?',
+              message: 'Changes made from another session detected. Load the latest data?',
               onConfirm: () => {
-                const convertedSongs = updatedSongs.map(dbSong => ({
-                  id: dbSong.id,
-                  title: dbSong.title,
-                  duration: dbSong.duration,
-                  interestedPlayers: [],
-                  players: dbSong.players
-                }));
-                setSongs(convertedSongs);
+                setSongs(mergedSongs);
                 setLastSynced(new Date());
-                console.log('🔄 Real-time update applied');
                 setNotification(null);
               }
             });
-          } else {
-            console.log('🔄 No significant changes detected, skipping notification');
           }
-        } else {
-          console.log('🔄 Skipping notification - too soon after last one');
         }
       }
     });
@@ -560,6 +629,95 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
     }
   };
 
+  // Handle PDF upload for a song
+  const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>, songId: number) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    console.debug('[DEBUG] Starting PDF upload for song:', songId);
+    
+    try {
+      const url = await SongService.uploadPdf(file, songId);
+      if (url) {
+        console.debug('[DEBUG] PDF uploaded successfully, URL:', url);
+        
+        // Update local state with multiple PDF support
+        const updatedSongs = songs.map(song => {
+          if (song.id === songId) {
+            const currentPdfUrls = getSongPdfUrls(song);
+            const newPdfUrls = [...currentPdfUrls, url];
+            return { 
+              ...song, 
+              pdf_url: url, // Keep for backward compatibility
+              pdf_urls: newPdfUrls 
+            };
+          }
+          return song;
+        });
+        setSongs(updatedSongs);
+        
+        // Save to database
+        const songToUpdate = updatedSongs.find(s => s.id === songId);
+        if (songToUpdate) {
+          await SongService.saveSong({
+            id: songToUpdate.id,
+            title: songToUpdate.title,
+            duration: songToUpdate.duration,
+            players: songToUpdate.players || {
+              electricGuitar: [],
+              acousticGuitar: [],
+              bass: [],
+              vocals: [],
+              backupVocals: []
+            },
+            pdf_url: url,
+            pdf_urls: songToUpdate.pdf_urls
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error uploading PDF:', error);
+      alert('Failed to upload PDF. Please try again.');
+    }
+  };
+
+  // Remove a specific PDF from a song
+  const removePdf = async (songId: number, pdfUrl: string) => {
+    const updatedSongs = songs.map(song => {
+      if (song.id === songId) {
+        const currentPdfUrls = getSongPdfUrls(song);
+        const filteredUrls = currentPdfUrls.filter(url => url !== pdfUrl);
+        
+        return { 
+          ...song, 
+          pdf_url: filteredUrls.length > 0 ? filteredUrls[0] : null, // Keep first for backward compatibility
+          pdf_urls: filteredUrls.length > 0 ? filteredUrls : []
+        };
+      }
+      return song;
+    });
+    setSongs(updatedSongs);
+    
+    // Save to database
+    const songToUpdate = updatedSongs.find(s => s.id === songId);
+    if (songToUpdate) {
+      await SongService.saveSong({
+        id: songToUpdate.id,
+        title: songToUpdate.title,
+        duration: songToUpdate.duration,
+        players: songToUpdate.players || {
+          electricGuitar: [],
+          acousticGuitar: [],
+          bass: [],
+          vocals: [],
+          backupVocals: []
+        },
+        pdf_url: songToUpdate.pdf_url,
+        pdf_urls: songToUpdate.pdf_urls
+      });
+    }
+  };
+
   // Add a player to a specific instrument for a song
   const addPlayerToInstrument = (songId: number, instrument: string, playerName: string) => {
     // Block function if user is not admin
@@ -604,15 +762,14 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
     // Find the updated song to save directly to database
     const songToUpdate = updatedSongs.find(song => song.id === songId);
     if (songToUpdate && songToUpdate.players) {
-      // Save directly to database
       SongService.saveSong({
         id: songToUpdate.id,
         title: songToUpdate.title,
         duration: songToUpdate.duration,
-        players: songToUpdate.players
+        players: songToUpdate.players,
+        pdf_url: songToUpdate.pdf_url || null,
+        pdf_urls: songToUpdate.pdf_urls
       }).then(() => {
-        // Force a refresh from the database after a short delay
-        // This ensures the UI is updated with the latest data
         setTimeout(() => {
           loadFromDatabase();
         }, 300);
@@ -647,15 +804,14 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
     // Find the updated song to save directly to database
     const songToUpdate = updatedSongs.find(song => song.id === songId);
     if (songToUpdate && songToUpdate.players) {
-      // Save directly to database
       SongService.saveSong({
         id: songToUpdate.id,
         title: songToUpdate.title,
         duration: songToUpdate.duration,
-        players: songToUpdate.players
+        players: songToUpdate.players,
+        pdf_url: songToUpdate.pdf_url || null,
+        pdf_urls: songToUpdate.pdf_urls
       }).then(() => {
-        // Force a refresh from the database after a short delay
-        // This ensures the UI is updated with the latest data
         setTimeout(() => {
           loadFromDatabase();
         }, 300);
@@ -699,164 +855,6 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
       return `${hours}:${minutes.toString().padStart(2, '0')}:${totalTime.seconds.toString().padStart(2, '0')}`;
     }
     return `${totalTime.minutes}:${totalTime.seconds.toString().padStart(2, '0')}`;
-  };
-
-  // Upload PDF file for a song
-  const uploadPDF = async (songId: number, file: File) => {
-    // Block function if user is not admin
-    if (userRole !== 'admin') {
-      alert('Only admin users can upload PDF files.');
-      return;
-    }
-
-    // Validate file type
-    if (file.type !== 'application/pdf') {
-      alert('Please select a PDF file.');
-      return;
-    }
-
-    // Validate file size (10MB limit)
-    if (file.size > 10 * 1024 * 1024) {
-      alert('PDF file size must be less than 10MB.');
-      return;
-    }
-
-    try {
-      // Create a unique filename
-      const fileName = `song-${songId}-lyrics-${Date.now()}.pdf`;
-      
-      console.log('Uploading PDF:', fileName, 'Size:', file.size);
-      
-      // First, check if bucket exists
-      const { data: buckets, error: bucketError } = await supabase.storage.listBuckets();
-      console.log('Available buckets:', buckets);
-      
-      if (bucketError) {
-        console.error('Bucket list error:', bucketError);
-        alert('Unable to access storage. Please contact the administrator.');
-        return;
-      }
-
-      // Upload to Supabase Storage
-      const { error } = await supabase.storage
-        .from('song-files')
-        .upload(fileName, file, {
-          cacheControl: '3600',
-          upsert: false
-        });
-
-      if (error) {
-        console.error('Upload error:', error);
-        
-        // Handle specific errors
-        if (error.message.includes('Bucket not found')) {
-          alert('Storage bucket "song-files" not found. Please contact the administrator to set up storage.');
-        } else if (error.message.includes('row level security') || error.message.includes('policy')) {
-          alert('Storage permissions not configured. Please contact the administrator.');
-        } else if (error.message.includes('Invalid bucket')) {
-          alert('Invalid storage configuration. Please contact the administrator.');
-        } else {
-          alert(`Upload failed: ${error.message}`);
-        }
-        return;
-      }
-
-      console.log('Upload successful, getting public URL...');
-
-      // Get public URL
-      const { data: urlData } = supabase.storage
-        .from('song-files')
-        .getPublicUrl(fileName);
-
-      console.log('Public URL:', urlData.publicUrl);
-
-      // Update song with PDF URL
-      const updatedSongs = songs.map((song: Song) => 
-        song.id === songId ? { ...song, pdf_url: urlData.publicUrl } : song
-      );
-      setSongs(updatedSongs);
-
-      // Update database
-      const songToUpdate = updatedSongs.find(song => song.id === songId);
-      if (songToUpdate) {
-        await SongService.saveSong({
-          id: songToUpdate.id,
-          title: songToUpdate.title,
-          duration: songToUpdate.duration,
-          pdf_url: songToUpdate.pdf_url,
-          players: songToUpdate.players || {
-            electricGuitar: [],
-            acousticGuitar: [],
-            bass: [],
-            vocals: [],
-            backupVocals: []
-          }
-        });
-      }
-
-      alert('PDF uploaded successfully!');
-    } catch (error) {
-      console.error('Upload error:', error);
-      alert('Failed to upload PDF. Please check your internet connection and try again.');
-    }
-  };
-
-  // Delete PDF file for a song
-  const deletePDF = async (songId: number) => {
-    // Block function if user is not admin
-    if (userRole !== 'admin') {
-      alert('Only admin users can delete PDF files.');
-      return;
-    }
-
-    const song = songs.find(s => s.id === songId);
-    if (!song?.pdf_url) return;
-
-    try {
-      // Extract filename from URL
-      const url = new URL(song.pdf_url);
-      const fileName = url.pathname.split('/').pop();
-      
-      if (fileName) {
-        // Delete from Supabase Storage
-        const { error } = await supabase.storage
-          .from('song-files')
-          .remove([fileName]);
-
-        if (error) {
-          console.error('Delete error:', error);
-        }
-      }
-
-      // Update song to remove PDF URL
-      const updatedSongs = songs.map((s: Song) => 
-        s.id === songId ? { ...s, pdf_url: undefined } : s
-      );
-      setSongs(updatedSongs);
-
-      // Update database
-      const songToUpdate = updatedSongs.find(s => s.id === songId);
-      if (songToUpdate) {
-        await SongService.saveSong({
-          id: songToUpdate.id,
-          title: songToUpdate.title,
-          duration: songToUpdate.duration,
-          pdf_url: null,
-          players: songToUpdate.players || {
-            electricGuitar: [],
-            acousticGuitar: [],
-            bass: [],
-            vocals: [],
-            backupVocals: []
-          }
-        });
-      }
-
-      alert('PDF deleted successfully!');
-    } catch (error) {
-      console.error('Delete error:', error);
-      alert('Failed to delete PDF. Please try again.');
-    }
   };
 
   return (
@@ -984,236 +982,241 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                       {index + 1}
                     </td>
                     <td className="px-6 py-4">
-                      <div className="space-y-3">
+                      <div className="space-y-3 mt-3">
                         {/* Song title input */}
-                        {/* Song Title Input with Inline PDF Controls */}
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="text"
-                            value={song.title}
-                            onChange={(e) => updateSong(song.id, 'title', e.target.value)}
-                            readOnly={userRole !== 'admin'}
-                            className={`flex-1 p-3 text-sm border border-slate-600 rounded-lg text-white placeholder-slate-400 font-medium ${
-                              userRole === 'admin' 
-                                ? 'bg-slate-700/50 focus:ring-2 focus:ring-amber-500 focus:border-amber-500' 
-                                : 'bg-slate-800/60 cursor-not-allowed'
-                            }`}
-                            placeholder="Enter song title..."
-                          />
-                          
-                          {/* PDF Controls Inline */}
-                          {song.pdf_url ? (
-                            <>
-                              <a 
-                                href={song.pdf_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-1 px-2 py-1 bg-green-900/60 text-green-200 text-xs rounded border border-green-700/50 hover:bg-green-800/60 transition-colors whitespace-nowrap"
-                                title="View PDF"
-                              >
-                                <FileText className="w-3 h-3" />
-                                <span className="hidden sm:inline">PDF</span>
-                              </a>
+                        <input
+                          type="text"
+                          value={song.title}
+                          onChange={(e) => updateSong(song.id, 'title', e.target.value)}
+                          readOnly={userRole !== 'admin'}
+                          className={`w-full p-3 text-base border border-slate-600 rounded-lg text-white placeholder-slate-400 font-medium ${
+                            userRole === 'admin' 
+                              ? 'bg-slate-700/50 focus:ring-2 focus:ring-amber-500 focus:border-amber-500' 
+                              : 'bg-slate-800/60 cursor-not-allowed'
+                          }`}
+                          placeholder="Enter song title..."
+                        />
+                        {/* PDF Section - Combined upload and view */}
+                        {(userRole === 'admin' || getSongPdfUrls(song).length > 0) && (
+                          <div className="mb-4">
+                            <label className="block text-xs font-semibold text-amber-400 mb-2">Sheet Music PDF</label>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {/* Upload button - admin only */}
                               {userRole === 'admin' && (
-                                <button
-                                  onClick={() => deletePDF(song.id)}
-                                  className="p-1 text-red-400 hover:text-red-300 hover:bg-red-900/40 rounded transition-colors"
-                                  title="Delete PDF"
-                                >
-                                  <X className="w-3 h-3" />
-                                </button>
+                                <>
+                                  <input
+                                    type="file"
+                                    id={`pdf-upload-${song.id}`}
+                                    accept=".pdf"
+                                    onChange={(e) => handlePdfUpload(e, song.id)}
+                                    className="hidden"
+                                  />
+                                  <label
+                                    htmlFor={`pdf-upload-${song.id}`}
+                                    className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-700/60 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-md border border-slate-600 cursor-pointer transition-colors"
+                                  >
+                                    <Download className="w-3 h-3" />
+                                    Upload PDF
+                                  </label>
+                                </>
                               )}
-                            </>
-                          ) : (
-                            userRole === 'admin' && (
-                              <label className="flex items-center gap-1 px-2 py-1 bg-blue-900/60 text-blue-200 text-xs rounded border border-blue-700/50 hover:bg-blue-800/60 transition-colors cursor-pointer whitespace-nowrap" title="Upload PDF">
-                                <Upload className="w-3 h-3" />
-                                <span className="hidden sm:inline">PDF</span>
-                                <input
-                                  type="file"
-                                  accept=".pdf"
-                                  className="hidden"
-                                  onChange={(e) => {
-                                    const file = e.target.files?.[0];
-                                    if (file) {
-                                      uploadPDF(song.id, file);
-                                      e.target.value = ''; // Reset file input
-                                    }
-                                  }}
-                                />
-                              </label>
-                            )
-                          )}
-                        </div>
+                              
+                              {/* View buttons for all PDFs - in the same row */}
+                              {getSongPdfUrls(song).map((pdfUrl, index) => (
+                                <div key={index} className="flex items-center gap-1">
+                                  <a
+                                    href={pdfUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-900/40 hover:bg-amber-900/60 text-amber-300 text-xs font-medium rounded-md border border-amber-700/50 transition-colors"
+                                  >
+                                    <Download className="w-3 h-3" />
+                                    View PDF {getSongPdfUrls(song).length > 1 ? `#${index + 1}` : ''}
+                                  </a>
+                                  {userRole === 'admin' && (
+                                    <button
+                                      onClick={() => removePdf(song.id, pdfUrl)}
+                                      className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-900/40 rounded-md transition-colors"
+                                      title="Remove PDF"
+                                    >
+                                      <X className="w-3 h-3" />
+                                    </button>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Players section - Sophisticated monochromatic design */}
+                      <div className="space-y-3 mt-3">
+                        <div className="text-sm font-semibold text-amber-400 mb-3">Band Members by Instrument:</div>
                         
-                        {/* Players section - Sophisticated monochromatic design */}
-                        <div className="space-y-3 mt-3">
-                          <div className="text-xs font-semibold text-amber-400 mb-3">Band Members by Instrument:</div>
-                          
-                          {/* Electric Guitar */}
-                          <div className="flex items-center gap-3 p-3 bg-slate-700/60 border border-slate-600 rounded-lg">
-                            <Guitar className="w-4 h-4 text-red-400 flex-shrink-0" />
-                            <span className="text-xs font-semibold text-red-300 min-w-[80px]">Electric:</span>
-                            <div className="flex flex-wrap gap-2 flex-1">
-                              {song.players?.electricGuitar?.map((player, playerIndex) => (
-                                <span key={playerIndex} className="inline-flex items-center gap-1 px-3 py-1 bg-red-900/40 text-red-200 text-xs rounded-full font-medium border border-red-700/50">
-                                  {player}
-                                  {userRole === 'admin' && (
-                                    <button 
-                                      onClick={() => removePlayerFromInstrument(song.id, 'electricGuitar', player)}
-                                      className="text-red-400 hover:text-red-200 transition-colors"
-                                      title="Remove player"
-                                    >
-                                      <X className="w-3 h-3" />
-                                    </button>
-                                  )}
-                                </span>
-                              ))}
-                              {userRole === 'admin' && (
-                                <button 
-                                  onClick={() => {
-                                    const name = prompt('Enter player name for Electric Guitar:');
-                                    if (name) addPlayerToInstrument(song.id, 'electricGuitar', name);
-                                  }}
-                                  className="px-3 py-1 text-red-400 hover:bg-red-900/40 text-xs rounded-full border border-red-700/50 hover:border-red-600 transition-colors font-medium"
-                                >
-                                  + Add
-                                </button>
-                              )}
-                            </div>
+                        {/* Electric Guitar */}
+                        <div className="flex items-center gap-3 p-3 bg-slate-700/60 border border-slate-600 rounded-lg">
+                          <Guitar className="w-4 h-4 text-red-400 flex-shrink-0" />
+                          <span className="text-sm font-semibold text-red-300 min-w-[80px]">Electric:</span>
+                          <div className="flex flex-wrap gap-2 flex-1">
+                            {song.players?.electricGuitar?.map((player, playerIndex) => (
+                              <span key={playerIndex} className="inline-flex items-center gap-1 px-3 py-1 bg-red-900/40 text-red-200 text-xs rounded-full font-medium border border-red-700/50">
+                                {player}
+                                {userRole === 'admin' && (
+                                  <button 
+                                    onClick={() => removePlayerFromInstrument(song.id, 'electricGuitar', player)}
+                                    className="text-red-400 hover:text-red-200 transition-colors"
+                                    title="Remove player"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                )}
+                              </span>
+                            ))}
+                            {userRole === 'admin' && (
+                              <button 
+                                onClick={() => {
+                                  const name = prompt('Enter player name for Electric Guitar:');
+                                  if (name) addPlayerToInstrument(song.id, 'electricGuitar', name);
+                                }}
+                                className="px-3 py-1 text-red-400 hover:bg-red-900/40 text-xs rounded-full border border-red-700/50 hover:border-red-600 transition-colors font-medium"
+                              >
+                                + Add
+                              </button>
+                            )}
                           </div>
+                        </div>
 
-                          {/* Acoustic Guitar */}
-                          <div className="flex items-center gap-3 p-3 bg-slate-700/60 border border-slate-600 rounded-lg">
-                            <Guitar className="w-4 h-4 text-amber-400 flex-shrink-0" />
-                            <span className="text-xs font-semibold text-amber-300 min-w-[80px]">Acoustic:</span>
-                            <div className="flex flex-wrap gap-2 flex-1">
-                              {song.players?.acousticGuitar?.map((player, playerIndex) => (
-                                <span key={playerIndex} className="inline-flex items-center gap-1 px-3 py-1 bg-amber-900/40 text-amber-200 text-xs rounded-full font-medium border border-amber-700/50">
-                                  {player}
-                                  {userRole === 'admin' && (
-                                    <button 
-                                      onClick={() => removePlayerFromInstrument(song.id, 'acousticGuitar', player)}
-                                      className="text-amber-400 hover:text-amber-200 transition-colors"
-                                      title="Remove player"
-                                    >
-                                      <X className="w-3 h-3" />
-                                    </button>
-                                  )}
-                                </span>
-                              ))}
-                              {userRole === 'admin' && (
-                                <button 
-                                  onClick={() => {
-                                    const name = prompt('Enter player name for Acoustic Guitar:');
-                                    if (name) addPlayerToInstrument(song.id, 'acousticGuitar', name);
-                                  }}
-                                  className="px-3 py-1 text-amber-400 hover:bg-amber-900/40 text-xs rounded-full border border-amber-700/50 hover:border-amber-600 transition-colors font-medium"
-                                >
-                                  + Add
-                                </button>
-                              )}
-                            </div>
+                        {/* Acoustic Guitar */}
+                        <div className="flex items-center gap-3 p-3 bg-slate-700/60 border border-slate-600 rounded-lg">
+                          <Guitar className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                          <span className="text-sm font-semibold text-amber-300 min-w-[80px]">Acoustic:</span>
+                          <div className="flex flex-wrap gap-2 flex-1">
+                            {song.players?.acousticGuitar?.map((player, playerIndex) => (
+                              <span key={playerIndex} className="inline-flex items-center gap-1 px-3 py-1 bg-amber-900/40 text-amber-200 text-xs rounded-full font-medium border border-amber-700/50">
+                                {player}
+                                {userRole === 'admin' && (
+                                  <button 
+                                    onClick={() => removePlayerFromInstrument(song.id, 'acousticGuitar', player)}
+                                    className="text-amber-400 hover:text-amber-200 transition-colors"
+                                    title="Remove player"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                )}
+                              </span>
+                            ))}
+                            {userRole === 'admin' && (
+                              <button 
+                                onClick={() => {
+                                  const name = prompt('Enter player name for Acoustic Guitar:');
+                                  if (name) addPlayerToInstrument(song.id, 'acousticGuitar', name);
+                                }}
+                                className="px-3 py-1 text-amber-400 hover:bg-amber-900/40 text-xs rounded-full border border-amber-700/50 hover:border-amber-600 transition-colors font-medium"
+                              >
+                                + Add
+                              </button>
+                            )}
                           </div>
+                        </div>
 
-                          {/* Bass */}
-                          <div className="flex items-center gap-3 p-3 bg-slate-700/60 border border-slate-600 rounded-lg">
-                            <Guitar className="w-4 h-4 text-purple-400 flex-shrink-0" />
-                            <span className="text-xs font-semibold text-purple-300 min-w-[80px]">Bass:</span>
-                            <div className="flex flex-wrap gap-2 flex-1">
-                              {song.players?.bass?.map((player, playerIndex) => (
-                                <span key={playerIndex} className="inline-flex items-center gap-1 px-3 py-1 bg-purple-900/40 text-purple-200 text-xs rounded-full font-medium border border-purple-700/50">
-                                  {player}
-                                  {userRole === 'admin' && (
-                                    <button 
-                                      onClick={() => removePlayerFromInstrument(song.id, 'bass', player)}
-                                      className="text-purple-400 hover:text-purple-200 transition-colors"
-                                      title="Remove player"
-                                    >
-                                      <X className="w-3 h-3" />
-                                    </button>
-                                  )}
-                                </span>
-                              ))}
-                              {userRole === 'admin' && (
-                                <button 
-                                  onClick={() => {
-                                    const name = prompt('Enter player name for Bass:');
-                                    if (name) addPlayerToInstrument(song.id, 'bass', name);
-                                  }}
-                                  className="px-3 py-1 text-purple-400 hover:bg-purple-900/40 text-xs rounded-full border border-purple-700/50 hover:border-purple-600 transition-colors font-medium"
-                                >
-                                  + Add
-                                </button>
-                              )}
-                            </div>
+                        {/* Bass */}
+                        <div className="flex items-center gap-3 p-3 bg-slate-700/60 border border-slate-600 rounded-lg">
+                          <Guitar className="w-4 h-4 text-purple-400 flex-shrink-0" />
+                          <span className="text-sm font-semibold text-purple-300 min-w-[80px]">Bass:</span>
+                          <div className="flex flex-wrap gap-2 flex-1">
+                            {song.players?.bass?.map((player, playerIndex) => (
+                              <span key={playerIndex} className="inline-flex items-center gap-1 px-3 py-1 bg-purple-900/40 text-purple-200 text-xs rounded-full font-medium border border-purple-700/50">
+                                {player}
+                                {userRole === 'admin' && (
+                                  <button 
+                                    onClick={() => removePlayerFromInstrument(song.id, 'bass', player)}
+                                    className="text-purple-400 hover:text-purple-200 transition-colors"
+                                    title="Remove player"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                )}
+                              </span>
+                            ))}
+                            {userRole === 'admin' && (
+                              <button 
+                                onClick={() => {
+                                  const name = prompt('Enter player name for Bass:');
+                                  if (name) addPlayerToInstrument(song.id, 'bass', name);
+                                }}
+                                className="px-3 py-1 text-purple-400 hover:bg-purple-900/40 text-xs rounded-full border border-purple-700/50 hover:border-purple-600 transition-colors font-medium"
+                              >
+                                + Add
+                              </button>
+                            )}
                           </div>
+                        </div>
 
-                          {/* Vocals */}
-                          <div className="flex items-center gap-3 p-3 bg-slate-700/60 border border-slate-600 rounded-lg">
-                            <Mic className="w-4 h-4 text-blue-400 flex-shrink-0" />
-                            <span className="text-xs font-semibold text-blue-300 min-w-[80px]">Vocals:</span>
-                            <div className="flex flex-wrap gap-2 flex-1">
-                              {song.players?.vocals?.map((player, playerIndex) => (
-                                <span key={playerIndex} className="inline-flex items-center gap-1 px-3 py-1 bg-blue-900/40 text-blue-200 text-xs rounded-full font-medium border border-blue-700/50">
-                                  {player}
-                                  {userRole === 'admin' && (
-                                    <button 
-                                      onClick={() => removePlayerFromInstrument(song.id, 'vocals', player)}
-                                      className="text-blue-400 hover:text-blue-200 transition-colors"
-                                      title="Remove player"
-                                    >
-                                      <X className="w-3 h-3" />
-                                    </button>
-                                  )}
-                                </span>
-                              ))}
-                              {userRole === 'admin' && (
-                                <button 
-                                  onClick={() => {
-                                    const name = prompt('Enter player name for Vocals:');
-                                    if (name) addPlayerToInstrument(song.id, 'vocals', name);
-                                  }}
-                                  className="px-3 py-1 text-blue-400 hover:bg-blue-900/40 text-xs rounded-full border border-blue-700/50 hover:border-blue-600 transition-colors font-medium"
-                                >
-                                  + Add
-                                </button>
-                              )}
-                            </div>
+                        {/* Vocals */}
+                        <div className="flex items-center gap-3 p-3 bg-slate-700/60 border border-slate-600 rounded-lg">
+                          <Mic className="w-4 h-4 text-blue-400 flex-shrink-0" />
+                          <span className="text-sm font-semibold text-blue-300 min-w-[80px]">Vocals:</span>
+                          <div className="flex flex-wrap gap-2 flex-1">
+                            {song.players?.vocals?.map((player, playerIndex) => (
+                              <span key={playerIndex} className="inline-flex items-center gap-1 px-3 py-1 bg-blue-900/40 text-blue-200 text-xs rounded-full font-medium border border-blue-700/50">
+                                {player}
+                                {userRole === 'admin' && (
+                                  <button 
+                                    onClick={() => removePlayerFromInstrument(song.id, 'vocals', player)}
+                                    className="text-blue-400 hover:text-blue-200 transition-colors"
+                                    title="Remove player"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                )}
+                              </span>
+                            ))}
+                            {userRole === 'admin' && (
+                              <button 
+                                onClick={() => {
+                                  const name = prompt('Enter player name for Vocals:');
+                                  if (name) addPlayerToInstrument(song.id, 'vocals', name);
+                                }}
+                                className="px-3 py-1 text-blue-400 hover:bg-blue-900/40 text-xs rounded-full border border-blue-700/50 hover:border-blue-600 transition-colors font-medium"
+                              >
+                                + Add
+                              </button>
+                            )}
                           </div>
+                        </div>
 
-                          {/* Backup Vocals */}
-                          <div className="flex items-center gap-3 p-3 bg-slate-700/60 border border-slate-600 rounded-lg">
-                            <Mic className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                            <span className="text-xs font-semibold text-emerald-300 min-w-[80px]">Backup:</span>
-                            <div className="flex flex-wrap gap-2 flex-1">
-                              {song.players?.backupVocals?.map((player, playerIndex) => (
-                                <span key={playerIndex} className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-900/40 text-emerald-200 text-xs rounded-full font-medium border border-emerald-700/50">
-                                  {player}
-                                  {userRole === 'admin' && (
-                                    <button 
-                                      onClick={() => removePlayerFromInstrument(song.id, 'backupVocals', player)}
-                                      className="text-emerald-400 hover:text-emerald-200 transition-colors"
-                                      title="Remove player"
-                                    >
-                                      <X className="w-3 h-3" />
-                                    </button>
-                                  )}
-                                </span>
-                              ))}
-                              {userRole === 'admin' && (
-                                <button 
-                                  onClick={() => {
-                                    const name = prompt('Enter player name for Backup Vocals:');
-                                    if (name) addPlayerToInstrument(song.id, 'backupVocals', name);
-                                  }}
-                                  className="px-3 py-1 text-emerald-400 hover:bg-emerald-900/40 text-xs rounded-full border border-emerald-700/50 hover:border-emerald-600 transition-colors font-medium"
-                                >
-                                  + Add
-                                </button>
-                              )}
-                            </div>
+                        {/* Backup Vocals */}
+                        <div className="flex items-center gap-3 p-3 bg-slate-700/60 border border-slate-600 rounded-lg">
+                          <Mic className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                          <span className="text-sm font-semibold text-emerald-300 min-w-[80px]">Backup:</span>
+                          <div className="flex flex-wrap gap-2 flex-1">
+                            {song.players?.backupVocals?.map((player, playerIndex) => (
+                              <span key={playerIndex} className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-900/40 text-emerald-200 text-xs rounded-full font-medium border border-emerald-700/50">
+                                {player}
+                                {userRole === 'admin' && (
+                                  <button 
+                                    onClick={() => removePlayerFromInstrument(song.id, 'backupVocals', player)}
+                                    className="text-emerald-400 hover:text-emerald-200 transition-colors"
+                                    title="Remove player"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                )}
+                              </span>
+                            ))}
+                            {userRole === 'admin' && (
+                              <button 
+                                onClick={() => {
+                                  const name = prompt('Enter player name for Backup Vocals:');
+                                  if (name) addPlayerToInstrument(song.id, 'backupVocals', name);
+                                }}
+                                className="px-3 py-1 text-emerald-400 hover:bg-emerald-900/40 text-xs rounded-full border border-emerald-700/50 hover:border-emerald-600 transition-colors font-medium"
+                              >
+                                + Add
+                              </button>
+                            )}
                           </div>
+                        </div>
 
                         {/* Old system data preservation */}
                         {song.interestedPlayers.length > 0 && (
@@ -1243,42 +1246,41 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                           </div>
                         )}
                       </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <input
-                      type="text"
-                      value={song.duration}
-                      onChange={(e) => updateSong(song.id, 'duration', e.target.value)}
-                      readOnly={userRole !== 'admin'}
-                      className={`w-full p-2 text-sm border border-slate-600 rounded text-white placeholder-slate-400 ${
-                        userRole === 'admin' 
-                          ? 'bg-slate-700/50 focus:ring-2 focus:ring-amber-500 focus:border-amber-500' 
-                          : 'bg-slate-800/60 cursor-not-allowed'
-                      }`}
-                      placeholder="4:35"
-                      pattern="[0-9]+:[0-5][0-9]"
-                    />
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    {userRole === 'admin' && (
-                      <button
-                        onClick={() => deleteSong(song.id)}
-                        className="p-2 text-red-400 hover:text-red-300 hover:bg-red-900/40 rounded-lg transition-colors"
-                        title="Delete song"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        
-        {/* Mobile card layout */}
-        <div className="lg:hidden space-y-4">
+                    </td>
+                    <td className="px-4 py-3">
+                      <input
+                        type="text"
+                        value={song.duration}
+                        onChange={(e) => updateSong(song.id, 'duration', e.target.value)}
+                        readOnly={userRole !== 'admin'}
+                        className={`w-full p-2 text-sm border border-slate-600 rounded text-white placeholder-slate-400 ${
+                          userRole === 'admin' 
+                            ? 'bg-slate-700/50 focus:ring-2 focus:ring-amber-500 focus:border-amber-500' 
+                            : 'bg-slate-800/60 cursor-not-allowed'
+                        }`}
+                        placeholder="4:35"
+                        pattern="[0-9]+:[0-5][0-9]"
+                      />
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      {userRole === 'admin' && (
+                        <button
+                          onClick={() => deleteSong(song.id)}
+                          className="p-2 text-red-400 hover:text-red-300 hover:bg-red-900/40 rounded-lg transition-colors"
+                          title="Delete song"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile card layout */}
+          <div className="lg:hidden space-y-4">
           {songs.map((song: Song, index: number) => (
             <div key={song.id} className="bg-slate-700/60 border border-slate-600 rounded-xl p-4 shadow-lg">
               <div className="flex items-center justify-between mb-3">
@@ -1294,69 +1296,73 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                 )}
               </div>
               
-              {/* Song title */}
-              {/* Song Title Input with PDF Controls Inline - Mobile */}
-              <div className="flex items-center gap-2 mb-3">
-                <input
-                  type="text"
-                  value={song.title}
-                  onChange={(e) => updateSong(song.id, 'title', e.target.value)}
-                  readOnly={userRole !== 'admin'}
-                  className={`flex-1 p-3 text-sm border border-slate-600 rounded-lg text-white placeholder-slate-400 font-medium ${
-                    userRole === 'admin' 
-                      ? 'bg-slate-700/50 focus:ring-2 focus:ring-amber-500 focus:border-amber-500' 
-                      : 'bg-slate-800/60 cursor-not-allowed'
-                  }`}
-                  placeholder="Enter song title..."
-                />
-                
-                {/* PDF Controls Inline - Mobile */}
-                {song.pdf_url ? (
-                  <>
-                    <a 
-                      href={song.pdf_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center justify-center p-2 bg-green-900/60 text-green-200 text-xs rounded border border-green-700/50 hover:bg-green-800/60 transition-colors"
-                      title="View PDF"
-                    >
-                      <FileText className="w-3 h-3" />
-                    </a>
+              <input
+                type="text"
+                value={song.title}
+                onChange={(e) => updateSong(song.id, 'title', e.target.value)}
+                readOnly={userRole !== 'admin'}
+                className={`w-full p-3 text-base border border-slate-600 rounded-lg text-white placeholder-slate-400 font-medium mb-3 ${
+                  userRole === 'admin' 
+                    ? 'bg-slate-700/50 focus:ring-2 focus:ring-amber-500 focus:border-amber-500' 
+                    : 'bg-slate-800/60 cursor-not-allowed'
+                }`}
+                placeholder="Enter song title..."
+              />
+
+              {/* PDF Section - Combined upload and view */}
+              {(userRole === 'admin' || getSongPdfUrls(song).length > 0) && (
+                <div className="mb-4">
+                  <label className="block text-xs font-semibold text-amber-400 mb-2">Sheet Music PDF</label>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {/* Upload button - admin only */}
                     {userRole === 'admin' && (
-                      <button
-                        onClick={() => deletePDF(song.id)}
-                        className="p-2 text-red-400 hover:text-red-300 hover:bg-red-900/40 rounded transition-colors"
-                        title="Delete PDF"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
+                      <>
+                        <input
+                          type="file"
+                          id={`pdf-upload-mobile-${song.id}`}
+                          accept=".pdf"
+                          onChange={(e) => handlePdfUpload(e, song.id)}
+                          className="hidden"
+                        />
+                        <label
+                          htmlFor={`pdf-upload-mobile-${song.id}`}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-700/60 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-md border border-slate-600 cursor-pointer transition-colors"
+                        >
+                          <Download className="w-3 h-3" />
+                          Upload PDF
+                        </label>
+                      </>
                     )}
-                  </>
-                ) : (
-                  userRole === 'admin' && (
-                    <label className="flex items-center justify-center p-2 bg-blue-900/60 text-blue-200 text-xs rounded border border-blue-700/50 hover:bg-blue-800/60 transition-colors cursor-pointer" title="Upload PDF">
-                      <Upload className="w-3 h-3" />
-                      <input
-                        type="file"
-                        accept=".pdf"
-                        className="hidden"
-                        title="Upload PDF file"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            uploadPDF(song.id, file);
-                            e.target.value = ''; // Reset file input
-                          }
-                        }}
-                      />
-                    </label>
-                  )
-                )}
-              </div>
-              
-              {/* Duration */}
+                    
+                    {/* View buttons for all PDFs - in the same row */}
+                    {getSongPdfUrls(song).map((pdfUrl, index) => (
+                      <div key={index} className="flex items-center gap-1">
+                        <a
+                          href={pdfUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-900/40 hover:bg-amber-900/60 text-amber-300 text-xs font-medium rounded-md border border-amber-700/50 transition-colors"
+                        >
+                          <Download className="w-3 h-3" />
+                          View PDF {getSongPdfUrls(song).length > 1 ? `#${index + 1}` : ''}
+                        </a>
+                        {userRole === 'admin' && (
+                          <button
+                            onClick={() => removePdf(song.id, pdfUrl)}
+                            className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-900/40 rounded-md transition-colors"
+                            title="Remove PDF"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="mb-4">
-                <label className="block text-xs font-semibold text-amber-400 mb-1">Duration (M:SS)</label>
+                <label className="block text-xs font-semibold text-amber-400 mb-2">Duration (M:SS)</label>
                 <input
                   type="text"
                   value={song.duration}
@@ -1371,28 +1377,28 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                   pattern="[0-9]+:[0-5][0-9]"
                 />
               </div>
-              
-              {/* Players section - Mobile optimized */}
+
               <div className="space-y-3">
-                <div className="text-xs font-semibold text-amber-400">Band Members by Instrument:</div>
+                <div className="text-sm font-semibold text-amber-400">Band Members by Instrument:</div>
                 
-                {/* Electric Guitar - Mobile */}
                 <div className="bg-slate-700/60 border border-slate-600 rounded-lg p-3">
                   <div className="flex items-center gap-2 mb-2">
                     <Guitar className="w-4 h-4 text-red-400" />
-                    <span className="text-xs font-semibold text-red-300">Electric Guitar:</span>
+                    <span className="text-sm font-semibold text-red-300">Electric Guitar:</span>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {song.players?.electricGuitar?.map((player, playerIndex) => (
                       <span key={playerIndex} className="inline-flex items-center gap-1 px-3 py-1 bg-red-900/40 text-red-200 text-xs rounded-full font-medium border border-red-700/50">
                         {player}
-                        <button 
-                          onClick={() => removePlayerFromInstrument(song.id, 'electricGuitar', player)}
-                          className="text-red-400 hover:text-red-200 transition-colors"
-                          title="Remove player"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
+                        {userRole === 'admin' && (
+                          <button 
+                            onClick={() => removePlayerFromInstrument(song.id, 'electricGuitar', player)}
+                            className="text-red-400 hover:text-red-200 transition-colors"
+                            title="Remove player"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        )}
                       </span>
                     ))}
                     {userRole === 'admin' && (
@@ -1409,11 +1415,10 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                   </div>
                 </div>
 
-                {/* Acoustic Guitar - Mobile */}
                 <div className="bg-slate-700/60 border border-slate-600 rounded-lg p-3">
                   <div className="flex items-center gap-2 mb-2">
                     <Guitar className="w-4 h-4 text-amber-400" />
-                    <span className="text-xs font-semibold text-amber-300">Acoustic Guitar:</span>
+                    <span className="text-sm font-semibold text-amber-300">Acoustic Guitar:</span>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {song.players?.acousticGuitar?.map((player, playerIndex) => (
@@ -1444,11 +1449,10 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                   </div>
                 </div>
 
-                {/* Bass - Mobile */}
                 <div className="bg-slate-700/60 border border-slate-600 rounded-lg p-3">
                   <div className="flex items-center gap-2 mb-2">
                     <Guitar className="w-4 h-4 text-purple-400" />
-                    <span className="text-xs font-semibold text-purple-300">Bass:</span>
+                    <span className="text-sm font-semibold text-purple-300">Bass:</span>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {song.players?.bass?.map((player, playerIndex) => (
@@ -1465,23 +1469,24 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                         )}
                       </span>
                     ))}
-                    <button 
-                      onClick={() => {
-                        const name = prompt('Enter player name for Bass:');
-                        if (name) addPlayerToInstrument(song.id, 'bass', name);
-                      }}
-                      className="px-3 py-1 text-purple-400 hover:bg-purple-900/40 text-xs rounded-full border border-purple-700/50 hover:border-purple-600 transition-colors font-medium"
-                    >
-                      + Add
-                    </button>
+                    {userRole === 'admin' && (
+                      <button 
+                        onClick={() => {
+                          const name = prompt('Enter player name for Bass:');
+                          if (name) addPlayerToInstrument(song.id, 'bass', name);
+                        }}
+                        className="px-3 py-1 text-purple-400 hover:bg-purple-900/40 text-xs rounded-full border border-purple-700/50 hover:border-purple-600 transition-colors font-medium"
+                      >
+                        + Add
+                      </button>
+                    )}
                   </div>
                 </div>
 
-                {/* Vocals - Mobile */}
                 <div className="bg-slate-700/60 border border-slate-600 rounded-lg p-3">
                   <div className="flex items-center gap-2 mb-2">
                     <Mic className="w-4 h-4 text-blue-400" />
-                    <span className="text-xs font-semibold text-blue-300">Lead Vocals:</span>
+                    <span className="text-sm font-semibold text-blue-300">Vocals:</span>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {song.players?.vocals?.map((player, playerIndex) => (
@@ -1498,23 +1503,24 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                         )}
                       </span>
                     ))}
-                    <button 
-                      onClick={() => {
-                        const name = prompt('Enter player name for Vocals:');
-                        if (name) addPlayerToInstrument(song.id, 'vocals', name);
-                      }}
-                      className="px-3 py-1 text-blue-400 hover:bg-blue-900/40 text-xs rounded-full border border-blue-700/50 hover:border-blue-600 transition-colors font-medium"
-                    >
-                      + Add
-                    </button>
+                    {userRole === 'admin' && (
+                      <button 
+                        onClick={() => {
+                          const name = prompt('Enter player name for Vocals:');
+                          if (name) addPlayerToInstrument(song.id, 'vocals', name);
+                        }}
+                        className="px-3 py-1 text-blue-400 hover:bg-blue-900/40 text-xs rounded-full border border-blue-700/50 hover:border-blue-600 transition-colors font-medium"
+                      >
+                        + Add
+                      </button>
+                    )}
                   </div>
                 </div>
 
-                {/* Backup Vocals - Mobile */}
                 <div className="bg-slate-700/60 border border-slate-600 rounded-lg p-3">
                   <div className="flex items-center gap-2 mb-2">
                     <Mic className="w-4 h-4 text-emerald-400" />
-                    <span className="text-xs font-semibold text-emerald-300">Backup Vocals:</span>
+                    <span className="text-sm font-semibold text-emerald-300">Backup Vocals:</span>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {song.players?.backupVocals?.map((player, playerIndex) => (
@@ -1531,19 +1537,20 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                         )}
                       </span>
                     ))}
-                    <button 
-                      onClick={() => {
-                        const name = prompt('Enter player name for Backup Vocals:');
-                        if (name) addPlayerToInstrument(song.id, 'backupVocals', name);
-                      }}
-                      className="px-3 py-1 text-emerald-400 hover:bg-emerald-900/40 text-xs rounded-full border border-emerald-700/50 hover:border-emerald-600 transition-colors font-medium"
-                    >
-                      + Add
-                    </button>
+                    {userRole === 'admin' && (
+                      <button 
+                        onClick={() => {
+                          const name = prompt('Enter player name for Backup Vocals:');
+                          if (name) addPlayerToInstrument(song.id, 'backupVocals', name);
+                        }}
+                        className="px-3 py-1 text-emerald-400 hover:bg-emerald-900/40 text-xs rounded-full border border-emerald-700/50 hover:border-emerald-600 transition-colors font-medium"
+                      >
+                        + Add
+                      </button>
+                    )}
                   </div>
                 </div>
 
-                {/* Legacy players - Mobile */}
                 {song.interestedPlayers.length > 0 && (
                   <div className="p-3 bg-slate-700/40 border border-slate-600 rounded-lg">
                     <div className="text-xs font-medium text-slate-400 mb-2">Legacy Interest List:</div>
