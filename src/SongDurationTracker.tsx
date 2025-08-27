@@ -1007,19 +1007,20 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                     </td>
                     <td className="px-6 py-4">
                       <div className="space-y-3 mt-3">
-                        {/* Song title input */}
-                        <input
-                          type="text"
-                          value={song.title}
-                          onChange={(e) => updateSong(song.id, 'title', e.target.value)}
-                          readOnly={userRole !== 'admin'}
-                          className={`w-full p-3 text-base border border-slate-600 rounded-lg text-white placeholder-slate-400 font-medium ${
-                            userRole === 'admin' 
-                              ? 'bg-slate-700/50 focus:ring-2 focus:ring-amber-500 focus:border-amber-500' 
-                              : 'bg-slate-800/60 cursor-not-allowed'
-                          }`}
-                          placeholder="Enter song title..."
-                        />
+                        {/* Song title - Different rendering for admin vs viewer */}
+                        {userRole === 'admin' ? (
+                          <input
+                            type="text"
+                            value={song.title}
+                            onChange={(e) => updateSong(song.id, 'title', e.target.value)}
+                            className="w-full p-3 text-base border border-slate-600 rounded-lg text-white placeholder-slate-400 font-medium bg-slate-700/50 focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                            placeholder="Enter song title..."
+                          />
+                        ) : (
+                          <div className="w-full p-3 text-base border border-slate-600 rounded-lg text-white font-medium bg-slate-800/60 break-words whitespace-normal leading-relaxed min-h-[3.25rem] flex items-center">
+                            {song.title || 'Untitled Song'}
+                          </div>
+                        )}
                         {/* PDF Section - Combined upload and view */}
                         {(userRole === 'admin' || getSongPdfUrls(song).length > 0) && (
                           <div className="mb-4">
@@ -1320,18 +1321,20 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                 )}
               </div>
               
-              <input
-                type="text"
-                value={song.title}
-                onChange={(e) => updateSong(song.id, 'title', e.target.value)}
-                readOnly={userRole !== 'admin'}
-                className={`w-full p-3 text-base border border-slate-600 rounded-lg text-white placeholder-slate-400 font-medium mb-3 ${
-                  userRole === 'admin' 
-                    ? 'bg-slate-700/50 focus:ring-2 focus:ring-amber-500 focus:border-amber-500' 
-                    : 'bg-slate-800/60 cursor-not-allowed'
-                }`}
-                placeholder="Enter song title..."
-              />
+              {/* Song Title - Different rendering for admin vs viewer */}
+              {userRole === 'admin' ? (
+                <input
+                  type="text"
+                  value={song.title}
+                  onChange={(e) => updateSong(song.id, 'title', e.target.value)}
+                  className="w-full p-3 text-base border border-slate-600 rounded-lg text-white placeholder-slate-400 font-medium mb-3 bg-slate-700/50 focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                  placeholder="Enter song title..."
+                />
+              ) : (
+                <div className="w-full p-3 text-base border border-slate-600 rounded-lg text-white font-medium mb-3 bg-slate-800/60 break-words whitespace-normal leading-relaxed min-h-[3.25rem] flex items-center">
+                  {song.title || 'Untitled Song'}
+                </div>
+              )}
 
               {/* PDF Section - Combined upload and view */}
               {(userRole === 'admin' || getSongPdfUrls(song).length > 0) && (
