@@ -927,16 +927,16 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
           fontStyle: 'bold'
         },
         columnStyles: {
-          0: { cellWidth: 10 }, // Song # column
-          1: { cellWidth: 40 }, // Title column
-          2: { cellWidth: 18 }, // Duration column
-          3: { cellWidth: 23 }, // Electric Guitar
-          4: { cellWidth: 23 }, // Acoustic Guitar
-          5: { cellWidth: 18 }, // Bass
-          6: { cellWidth: 18 }, // Vocals
-          7: { cellWidth: 23 }  // Backup Vocals
+          0: { cellWidth: 8 },  // Song # column
+          1: { cellWidth: 48 }, // Title column (increased)
+          2: { cellWidth: 16 }, // Duration column
+          3: { cellWidth: 28 }, // Electric Guitar (increased)
+          4: { cellWidth: 28 }, // Acoustic Guitar (increased)
+          5: { cellWidth: 16 }, // Bass
+          6: { cellWidth: 16 }, // Vocals
+          7: { cellWidth: 28 }  // Backup Vocals (increased)
         },
-        margin: { top: 30, left: 10, right: 10 }
+        margin: { top: 30, left: 8, right: 8 }
       });
       
       doc.save('massey-hall-song-list.pdf');
