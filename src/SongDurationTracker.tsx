@@ -927,14 +927,14 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
           fontStyle: 'bold'
         },
         columnStyles: {
-          0: { cellWidth: 12 }, // Song # column
-          1: { cellWidth: 45 }, // Title column (increased)
-          2: { cellWidth: 22 }, // Duration column (increased)
-          3: { cellWidth: 26 }, // Electric Guitar (increased)
-          4: { cellWidth: 26 }, // Acoustic Guitar (increased)
-          5: { cellWidth: 22 }, // Bass (increased)
-          6: { cellWidth: 22 }, // Vocals (increased)
-          7: { cellWidth: 26 }  // Backup Vocals (increased)
+          0: { cellWidth: 10 }, // Song # column
+          1: { cellWidth: 40 }, // Title column
+          2: { cellWidth: 18 }, // Duration column
+          3: { cellWidth: 23 }, // Electric Guitar
+          4: { cellWidth: 23 }, // Acoustic Guitar
+          5: { cellWidth: 18 }, // Bass
+          6: { cellWidth: 18 }, // Vocals
+          7: { cellWidth: 23 }  // Backup Vocals
         },
         margin: { top: 30, left: 10, right: 10 }
       });
