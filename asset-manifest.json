@@ -1,14 +1,14 @@
 {
   "files": {
     "main.css": "/massey-hall-song-list-2025/static/css/main.185ae5d6.css",
-    "main.js": "/massey-hall-song-list-2025/static/js/main.29ea9ce1.js",
+    "main.js": "/massey-hall-song-list-2025/static/js/main.bdba8223.js",
     "static/js/239.8481fdf0.chunk.js": "/massey-hall-song-list-2025/static/js/239.8481fdf0.chunk.js",
     "static/js/977.a46d107a.chunk.js": "/massey-hall-song-list-2025/static/js/977.a46d107a.chunk.js",
     "static/js/455.27d87797.chunk.js": "/massey-hall-song-list-2025/static/js/455.27d87797.chunk.js",
     "static/js/453.ad2ba78f.chunk.js": "/massey-hall-song-list-2025/static/js/453.ad2ba78f.chunk.js",
     "index.html": "/massey-hall-song-list-2025/index.html",
     "main.185ae5d6.css.map": "/massey-hall-song-list-2025/static/css/main.185ae5d6.css.map",
-    "main.29ea9ce1.js.map": "/massey-hall-song-list-2025/static/js/main.29ea9ce1.js.map",
+    "main.bdba8223.js.map": "/massey-hall-song-list-2025/static/js/main.bdba8223.js.map",
     "239.8481fdf0.chunk.js.map": "/massey-hall-song-list-2025/static/js/239.8481fdf0.chunk.js.map",
     "977.a46d107a.chunk.js.map": "/massey-hall-song-list-2025/static/js/977.a46d107a.chunk.js.map",
     "455.27d87797.chunk.js.map": "/massey-hall-song-list-2025/static/js/455.27d87797.chunk.js.map",
@@ -16,6 +16,6 @@
   },
   "entrypoints": [
     "static/css/main.185ae5d6.css",
-    "static/js/main.29ea9ce1.js"
+    "static/js/main.bdba8223.js"
   ]
 }
