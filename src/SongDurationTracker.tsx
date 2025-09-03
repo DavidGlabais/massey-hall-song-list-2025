@@ -936,7 +936,7 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
           6: { cellWidth: 25 }, // Vocals
           7: { cellWidth: 30 }  // Backup Vocals
         },
-        margin: { top: 30, left: 10, right: 10 }
+        margin: { top: 30, left: 15, right: 15 }
       });
       
       doc.save('massey-hall-song-list.pdf');
