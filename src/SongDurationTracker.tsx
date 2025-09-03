@@ -19,6 +19,8 @@ interface Song {
   id: number;
   title: string;
   duration: string;
+  tempo?: string;
+  groove?: string;
   interestedPlayers: string[]; // Keep existing for migration
   players?: {
     electricGuitar: string[];
@@ -288,6 +290,8 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
           id: dbSong.id,
           title: dbSong.title,
           duration: dbSong.duration,
+          tempo: dbSong.tempo,
+          groove: dbSong.groove,
           interestedPlayers: [], // Keep for legacy compatibility
           players: dbSong.players,
           pdf_url: dbSong.pdf_url,
@@ -456,11 +460,15 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                 id: dbSong.id,
                 title: dbSong.title,
                 duration: dbSong.duration,
+                tempo: dbSong.tempo,
+                groove: dbSong.groove,
                 interestedPlayers: [],
                 players: dbSong.players,
                 // Keep local PDF URL if it exists
                 pdf_url: currentSong?.pdf_url || dbSong.pdf_url,
-                pdf_urls: mergedPdfUrls
+                pdf_urls: mergedPdfUrls,
+                has_string_arrangement: dbSong.has_string_arrangement || false,
+                has_horn_arrangement: dbSong.has_horn_arrangement || false
               };
             });
 
@@ -1115,6 +1123,8 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                   <th className="px-6 py-4 text-left text-sm font-semibold text-amber-400 w-20">Song #</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-amber-400">Title & Players</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-amber-400 w-32">Duration (M:SS)</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-amber-400 w-24">Tempo</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-amber-400 w-20">Groove</th>
                   <th className="px-6 py-4 text-center text-sm font-semibold text-amber-400 w-20">Action</th>
                 </tr>
               </thead>
@@ -1443,6 +1453,34 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                         pattern="[0-9]+:[0-5][0-9]"
                       />
                     </td>
+                    <td className="px-4 py-3">
+                      <input
+                        type="text"
+                        value={song.tempo || ''}
+                        onChange={(e) => updateSong(song.id, 'tempo', e.target.value)}
+                        readOnly={userRole !== 'admin'}
+                        className={`w-full p-2 text-sm border border-slate-600 rounded text-white placeholder-slate-400 ${
+                          userRole === 'admin' 
+                            ? 'bg-slate-700/50 focus:ring-2 focus:ring-amber-500 focus:border-amber-500' 
+                            : 'bg-slate-800/60 cursor-not-allowed'
+                        }`}
+                        placeholder="120 BPM"
+                      />
+                    </td>
+                    <td className="px-4 py-3">
+                      <input
+                        type="text"
+                        value={song.groove || ''}
+                        onChange={(e) => updateSong(song.id, 'groove', e.target.value)}
+                        readOnly={userRole !== 'admin'}
+                        className={`w-full p-2 text-sm border border-slate-600 rounded text-white placeholder-slate-400 ${
+                          userRole === 'admin' 
+                            ? 'bg-slate-700/50 focus:ring-2 focus:ring-amber-500 focus:border-amber-500' 
+                            : 'bg-slate-800/60 cursor-not-allowed'
+                        }`}
+                        placeholder="Swing"
+                      />
+                    </td>
                     <td className="px-4 py-3 text-center">
                       {userRole === 'admin' && (
                         <button
@@ -1559,6 +1597,39 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                   placeholder="4:35"
                   pattern="[0-9]+:[0-5][0-9]"
                 />
+              </div>
+
+              <div className="mb-4 grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-amber-400 mb-2">Tempo</label>
+                  <input
+                    type="text"
+                    value={song.tempo || ''}
+                    onChange={(e) => updateSong(song.id, 'tempo', e.target.value)}
+                    readOnly={userRole !== 'admin'}
+                    className={`w-full p-2 text-sm border border-slate-600 rounded-lg text-white placeholder-slate-400 ${
+                      userRole === 'admin' 
+                        ? 'bg-slate-700/50 focus:ring-2 focus:ring-amber-500 focus:border-amber-500' 
+                        : 'bg-slate-800/60 cursor-not-allowed'
+                    }`}
+                    placeholder="120 BPM"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-amber-400 mb-2">Groove</label>
+                  <input
+                    type="text"
+                    value={song.groove || ''}
+                    onChange={(e) => updateSong(song.id, 'groove', e.target.value)}
+                    readOnly={userRole !== 'admin'}
+                    className={`w-full p-2 text-sm border border-slate-600 rounded-lg text-white placeholder-slate-400 ${
+                      userRole === 'admin' 
+                        ? 'bg-slate-700/50 focus:ring-2 focus:ring-amber-500 focus:border-amber-500' 
+                        : 'bg-slate-800/60 cursor-not-allowed'
+                    }`}
+                    placeholder="Swing"
+                  />
+                </div>
               </div>
 
               {/* Arrangement Details */}

@@ -11,6 +11,8 @@ export interface DatabaseSong {
   id: number;
   title: string;
   duration: string;
+  tempo?: string;
+  groove?: string;
   players: {
     electricGuitar: string[];
     acousticGuitar: string[];
