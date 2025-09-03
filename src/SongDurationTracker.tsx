@@ -1372,11 +1372,7 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                                 checked={song.has_string_arrangement || false}
                                 onChange={(e) => updateSongArrangement(song.id, 'has_string_arrangement', e.target.checked)}
                                 disabled={userRole !== 'admin'}
-                                className={`w-4 h-4 rounded focus:ring-2 ${
-                                  userRole === 'admin' 
-                                    ? 'text-white bg-green-600 border-green-500 focus:ring-green-500 cursor-pointer' 
-                                    : 'text-white bg-green-600 border-green-500 focus:ring-green-400 cursor-not-allowed'
-                                }`}
+                                className="w-4 h-4 rounded focus:ring-2 text-white bg-green-600 border-green-500 checked:bg-green-600 disabled:bg-green-600 focus:ring-green-500 cursor-pointer disabled:cursor-not-allowed"
                               />
                               String Arrangement
                             </label>
@@ -1386,11 +1382,7 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                                 checked={song.has_horn_arrangement || false}
                                 onChange={(e) => updateSongArrangement(song.id, 'has_horn_arrangement', e.target.checked)}
                                 disabled={userRole !== 'admin'}
-                                className={`w-4 h-4 rounded focus:ring-2 ${
-                                  userRole === 'admin' 
-                                    ? 'text-white bg-green-600 border-green-500 focus:ring-green-500 cursor-pointer' 
-                                    : 'text-white bg-green-600 border-green-500 focus:ring-green-400 cursor-not-allowed'
-                                }`}
+                                className="w-4 h-4 rounded focus:ring-2 text-white bg-green-600 border-green-500 checked:bg-green-600 disabled:bg-green-600 focus:ring-green-500 cursor-pointer disabled:cursor-not-allowed"
                               />
                               Horn Arrangement
                             </label>
@@ -1569,11 +1561,7 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                       checked={song.has_string_arrangement || false}
                       onChange={(e) => updateSongArrangement(song.id, 'has_string_arrangement', e.target.checked)}
                       disabled={userRole !== 'admin'}
-                      className={`w-4 h-4 rounded focus:ring-2 ${
-                        userRole === 'admin' 
-                          ? 'text-white bg-green-600 border-green-500 focus:ring-green-500 cursor-pointer' 
-                          : 'text-white bg-green-600 border-green-500 focus:ring-green-400 cursor-not-allowed'
-                      }`}
+                      className="w-4 h-4 rounded focus:ring-2 text-white bg-green-600 border-green-500 checked:bg-green-600 disabled:bg-green-600 focus:ring-green-500 cursor-pointer disabled:cursor-not-allowed"
                     />
                     String Arrangement
                   </label>
@@ -1583,11 +1571,7 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                       checked={song.has_horn_arrangement || false}
                       onChange={(e) => updateSongArrangement(song.id, 'has_horn_arrangement', e.target.checked)}
                       disabled={userRole !== 'admin'}
-                      className={`w-4 h-4 rounded focus:ring-2 ${
-                        userRole === 'admin' 
-                          ? 'text-white bg-green-600 border-green-500 focus:ring-green-500 cursor-pointer' 
-                          : 'text-white bg-green-600 border-green-500 focus:ring-green-400 cursor-not-allowed'
-                      }`}
+                      className="w-4 h-4 rounded focus:ring-2 text-white bg-green-600 border-green-500 checked:bg-green-600 disabled:bg-green-600 focus:ring-green-500 cursor-pointer disabled:cursor-not-allowed"
                     />
                     Horn Arrangement
                   </label>
