@@ -1374,8 +1374,8 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                                 disabled={userRole !== 'admin'}
                                 className={`w-4 h-4 rounded focus:ring-2 ${
                                   userRole === 'admin' 
-                                    ? 'text-amber-500 bg-slate-700 border-slate-600 focus:ring-amber-500 cursor-pointer' 
-                                    : 'text-cyan-400 bg-slate-800 border-slate-500 focus:ring-cyan-400 cursor-not-allowed'
+                                    ? 'text-white bg-green-600 border-green-500 focus:ring-green-500 cursor-pointer' 
+                                    : 'text-white bg-green-600 border-green-500 focus:ring-green-400 cursor-not-allowed'
                                 }`}
                               />
                               String Arrangement
@@ -1388,8 +1388,8 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                                 disabled={userRole !== 'admin'}
                                 className={`w-4 h-4 rounded focus:ring-2 ${
                                   userRole === 'admin' 
-                                    ? 'text-amber-500 bg-slate-700 border-slate-600 focus:ring-amber-500 cursor-pointer' 
-                                    : 'text-cyan-400 bg-slate-800 border-slate-500 focus:ring-cyan-400 cursor-not-allowed'
+                                    ? 'text-white bg-green-600 border-green-500 focus:ring-green-500 cursor-pointer' 
+                                    : 'text-white bg-green-600 border-green-500 focus:ring-green-400 cursor-not-allowed'
                                 }`}
                               />
                               Horn Arrangement
@@ -1571,8 +1571,8 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                       disabled={userRole !== 'admin'}
                       className={`w-4 h-4 rounded focus:ring-2 ${
                         userRole === 'admin' 
-                          ? 'text-amber-500 bg-slate-700 border-slate-600 focus:ring-amber-500 cursor-pointer' 
-                          : 'text-cyan-400 bg-slate-800 border-slate-500 focus:ring-cyan-400 cursor-not-allowed'
+                          ? 'text-white bg-green-600 border-green-500 focus:ring-green-500 cursor-pointer' 
+                          : 'text-white bg-green-600 border-green-500 focus:ring-green-400 cursor-not-allowed'
                       }`}
                     />
                     String Arrangement
@@ -1585,8 +1585,8 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                       disabled={userRole !== 'admin'}
                       className={`w-4 h-4 rounded focus:ring-2 ${
                         userRole === 'admin' 
-                          ? 'text-amber-500 bg-slate-700 border-slate-600 focus:ring-amber-500 cursor-pointer' 
-                          : 'text-cyan-400 bg-slate-800 border-slate-500 focus:ring-cyan-400 cursor-not-allowed'
+                          ? 'text-white bg-green-600 border-green-500 focus:ring-green-500 cursor-pointer' 
+                          : 'text-white bg-green-600 border-green-500 focus:ring-green-400 cursor-not-allowed'
                       }`}
                     />
                     Horn Arrangement
