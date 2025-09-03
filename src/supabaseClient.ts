@@ -20,6 +20,8 @@ export interface DatabaseSong {
   };
   pdf_url?: string | null;
   pdf_urls?: string[]; // New field for multiple PDFs
+  has_string_arrangement?: boolean;
+  has_horn_arrangement?: boolean;
   created_at?: string;
   updated_at?: string;
 }

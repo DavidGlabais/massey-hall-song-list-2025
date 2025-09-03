@@ -33,6 +33,8 @@ export class SongService {
         duration: song.duration,
         players: song.players,
         pdf_url: song.pdf_url,
+        has_string_arrangement: song.has_string_arrangement || false,
+        has_horn_arrangement: song.has_horn_arrangement || false,
         updated_at: new Date().toISOString()
       };
       
@@ -65,6 +67,8 @@ export class SongService {
           duration: song.duration,
           players: song.players,
           pdf_url: song.pdf_url,
+          has_string_arrangement: song.has_string_arrangement || false,
+          has_horn_arrangement: song.has_horn_arrangement || false,
           updated_at: new Date().toISOString()
         })))
       

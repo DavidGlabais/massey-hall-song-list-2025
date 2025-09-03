@@ -29,6 +29,8 @@ interface Song {
   };
   pdf_url?: string | null; // Keep for backward compatibility
   pdf_urls?: string[]; // New field for multiple PDFs
+  has_string_arrangement?: boolean;
+  has_horn_arrangement?: boolean;
 }
 
 // Helper function to get all PDF URLs for a song (backward compatibility)
@@ -289,7 +291,9 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
           interestedPlayers: [], // Keep for legacy compatibility
           players: dbSong.players,
           pdf_url: dbSong.pdf_url,
-          pdf_urls: dbSong.pdf_urls || []
+          pdf_urls: dbSong.pdf_urls || [],
+          has_string_arrangement: dbSong.has_string_arrangement || false,
+          has_horn_arrangement: dbSong.has_horn_arrangement || false
         }));
         
         setSongs(convertedSongs);
@@ -343,7 +347,9 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
           vocals: [],
           backupVocals: []
         },
-        pdf_url: song.pdf_url
+        pdf_url: song.pdf_url,
+        has_string_arrangement: song.has_string_arrangement || false,
+        has_horn_arrangement: song.has_horn_arrangement || false
       }));
       
       const success = await SongService.saveAllSongs(dbSongs);
@@ -608,6 +614,18 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
     ));
   };
 
+  const updateSongArrangement = (id: number, field: 'has_string_arrangement' | 'has_horn_arrangement', value: boolean) => {
+    // Block function if user is not admin
+    if (userRole !== 'admin') {
+      alert('Only admin users can edit song details.');
+      return;
+    }
+    
+    setSongs(songs.map((song: Song) => 
+      song.id === id ? { ...song, [field]: value } : song
+    ));
+  };
+
   const addSong = () => {
     // Block function if user is not admin
     if (userRole !== 'admin') {
@@ -680,7 +698,9 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
               backupVocals: []
             },
             pdf_url: url,
-            pdf_urls: songToUpdate.pdf_urls
+            pdf_urls: songToUpdate.pdf_urls,
+            has_string_arrangement: songToUpdate.has_string_arrangement || false,
+            has_horn_arrangement: songToUpdate.has_horn_arrangement || false
           });
         }
       }
@@ -722,7 +742,9 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
           backupVocals: []
         },
         pdf_url: songToUpdate.pdf_url,
-        pdf_urls: songToUpdate.pdf_urls
+        pdf_urls: songToUpdate.pdf_urls,
+        has_string_arrangement: songToUpdate.has_string_arrangement || false,
+        has_horn_arrangement: songToUpdate.has_horn_arrangement || false
       });
     }
   };
@@ -776,7 +798,9 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
         title: songToUpdate.title,
         duration: songToUpdate.duration,
         players: songToUpdate.players,
-        pdf_url: songToUpdate.pdf_url || null
+        pdf_url: songToUpdate.pdf_url || null,
+        has_string_arrangement: songToUpdate.has_string_arrangement || false,
+        has_horn_arrangement: songToUpdate.has_horn_arrangement || false
         // Note: Intentionally omitting pdf_urls to avoid database error
       }).then((success) => {
         if (success) {
@@ -827,7 +851,9 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
         title: songToUpdate.title,
         duration: songToUpdate.duration,
         players: songToUpdate.players,
-        pdf_url: songToUpdate.pdf_url || null
+        pdf_url: songToUpdate.pdf_url || null,
+        has_string_arrangement: songToUpdate.has_string_arrangement || false,
+        has_horn_arrangement: songToUpdate.has_horn_arrangement || false
         // Note: Intentionally omitting pdf_urls to avoid database error
       }).then((success) => {
         if (success) {
@@ -1329,6 +1355,33 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                           </div>
                         </div>
 
+                        {/* Arrangement Details */}
+                        <div className="mt-3 p-3 bg-slate-700/60 border border-slate-600 rounded-lg">
+                          <div className="text-sm font-semibold text-amber-400 mb-2">Arrangements:</div>
+                          <div className="flex gap-4">
+                            <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={song.has_string_arrangement || false}
+                                onChange={(e) => updateSongArrangement(song.id, 'has_string_arrangement', e.target.checked)}
+                                disabled={userRole !== 'admin'}
+                                className="w-4 h-4 text-amber-500 bg-slate-700 border-slate-600 rounded focus:ring-amber-500 focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                              />
+                              String Arrangement
+                            </label>
+                            <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={song.has_horn_arrangement || false}
+                                onChange={(e) => updateSongArrangement(song.id, 'has_horn_arrangement', e.target.checked)}
+                                disabled={userRole !== 'admin'}
+                                className="w-4 h-4 text-amber-500 bg-slate-700 border-slate-600 rounded focus:ring-amber-500 focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                              />
+                              Horn Arrangement
+                            </label>
+                          </div>
+                        </div>
+
                         {/* Old system data preservation */}
                         {song.interestedPlayers.length > 0 && (
                           <div className="mt-3 p-3 bg-slate-700/40 border border-slate-600 rounded-lg">
@@ -1489,6 +1542,33 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                   placeholder="4:35"
                   pattern="[0-9]+:[0-5][0-9]"
                 />
+              </div>
+
+              {/* Arrangement Details */}
+              <div className="mb-4">
+                <label className="block text-xs font-semibold text-amber-400 mb-2">Arrangements</label>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={song.has_string_arrangement || false}
+                      onChange={(e) => updateSongArrangement(song.id, 'has_string_arrangement', e.target.checked)}
+                      disabled={userRole !== 'admin'}
+                      className="w-4 h-4 text-amber-500 bg-slate-700 border-slate-600 rounded focus:ring-amber-500 focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    />
+                    String Arrangement
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={song.has_horn_arrangement || false}
+                      onChange={(e) => updateSongArrangement(song.id, 'has_horn_arrangement', e.target.checked)}
+                      disabled={userRole !== 'admin'}
+                      className="w-4 h-4 text-amber-500 bg-slate-700 border-slate-600 rounded focus:ring-amber-500 focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    />
+                    Horn Arrangement
+                  </label>
+                </div>
               </div>
 
               <div className="space-y-3">
