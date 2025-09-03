@@ -4,6 +4,15 @@ import { SongService } from './songService';
 import { supabase } from './supabaseClient';
 import type { DatabaseSong } from './supabaseClient';
 import { Notification } from './components/Notification';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+
+// Fix TypeScript error for autoTable
+declare module 'jspdf' {
+  interface jsPDF {
+    autoTable: typeof autoTable;
+  }
+}
 
 // Define the Song type
 interface Song {
@@ -220,7 +229,7 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
       if (dbSongs.length > 0) {
         // Check for duplicates before loading
         const titleMap = new Map();
-        const duplicates = [];
+        const duplicates: DatabaseSong[] = [];
         
         for (const song of dbSongs) {
           if (titleMap.has(song.title)) {
@@ -847,13 +856,29 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
   };
 
   const exportToCSV = () => {
-    const headers = ['Song #', 'Title', 'Duration'];
+    const headers = [
+      'Song #',
+      'Title',
+      'Duration',
+      'Electric Guitar',
+      'Acoustic Guitar',
+      'Bass',
+      'Vocals',
+      'Backup Vocals',
+      'Interested Players'
+    ];
     const csvContent = [
       headers.join(','),
       ...songs.map((song: Song) => [
         song.id,
         `"${song.title}"`,
-        song.duration
+        song.duration,
+        `"${(song.players?.electricGuitar || []).join('; ')}"`,
+        `"${(song.players?.acousticGuitar || []).join('; ')}"`,
+        `"${(song.players?.bass || []).join('; ')}"`,
+        `"${(song.players?.vocals || []).join('; ')}"`,
+        `"${(song.players?.backupVocals || []).join('; ')}"`,
+        `"${(song.interestedPlayers || []).join('; ')}"`
       ].join(','))
     ].join('\n');
 
@@ -864,6 +889,61 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
     a.download = 'song-playlist.csv';
     a.click();
     window.URL.revokeObjectURL(url);
+  };
+
+  const exportToPDF = () => {
+    try {
+      const doc = new jsPDF();
+      
+      // Add title
+      doc.setFontSize(16);
+      doc.text('Massey Hall Song List - November 15, 2025', 20, 20);
+      
+      // Prepare table data with proper song numbering
+      const tableData = songs.map((song, index) => [
+        (index + 1).toString(), // Song number (1, 2, 3, etc.)
+        song.title || 'Untitled Song',
+        song.duration || '',
+        (song.players?.electricGuitar || []).join('; '),
+        (song.players?.acousticGuitar || []).join('; '),
+        (song.players?.bass || []).join('; '),
+        (song.players?.vocals || []).join('; '),
+        (song.players?.backupVocals || []).join('; ')
+      ]);
+      
+      autoTable(doc, {
+        head: [['Song #', 'Title', 'Duration', 'Electric Guitar', 'Acoustic Guitar', 'Bass', 'Vocals', 'Backup Vocals']],
+        body: tableData,
+        startY: 30,
+        styles: { 
+          fontSize: 8,
+          cellPadding: 2,
+          overflow: 'linebreak',
+          halign: 'left'
+        },
+        headStyles: {
+          fillColor: [41, 128, 185],
+          textColor: 255,
+          fontStyle: 'bold'
+        },
+        columnStyles: {
+          0: { cellWidth: 15 }, // Song # column
+          1: { cellWidth: 50 }, // Title column wider
+          2: { cellWidth: 25 }, // Duration column
+          3: { cellWidth: 30 }, // Electric Guitar
+          4: { cellWidth: 30 }, // Acoustic Guitar
+          5: { cellWidth: 25 }, // Bass
+          6: { cellWidth: 25 }, // Vocals
+          7: { cellWidth: 30 }  // Backup Vocals
+        },
+        margin: { top: 30, left: 10, right: 10 }
+      });
+      
+      doc.save('massey-hall-song-list.pdf');
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      alert('Error generating PDF. Please try again or check the console for details.');
+    }
   };
 
   const formatTotalTime = () => {
@@ -886,7 +966,6 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
             onClose={() => setNotification(null)}
           />
         )}
-        
         <div className="mb-6 lg:mb-8">
           <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 mb-4 sm:mb-6">
             <div className="p-2 sm:p-3 bg-gradient-to-r from-amber-500 to-orange-500 rounded-xl shadow-lg">
@@ -914,7 +993,6 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
               </div>
             </div>
           </div>
-          
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-4 sm:mb-6 gap-4 lg:gap-0">
             <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
               <div className="bg-slate-800/80 backdrop-blur border border-slate-600 rounded-xl p-4 sm:p-5 shadow-xl">
@@ -922,7 +1000,6 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                 <div className="text-xl sm:text-2xl font-bold text-white">{formatTotalTime()}</div>
                 <div className="text-xs sm:text-sm text-slate-300">{totalTime.songsWithTime} of {songs.length} songs timed</div>
               </div>
-              
               {/* Online indicator - admin only */}
               {userRole === 'admin' && (
                 <div className={`border rounded-xl p-4 sm:p-5 shadow-xl backdrop-blur ${isOnline ? 'bg-emerald-900/80 border-emerald-600' : 'bg-red-900/80 border-red-600'}`}>
@@ -952,7 +1029,6 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                 </div>
               )}
             </div>
-            
             <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
               {/* Primary Controls */}
               {userRole === 'admin' && (
@@ -982,7 +1058,17 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
               >
                 <Download className="w-3 h-3 sm:w-4 sm:h-4" />
                 <span className="hidden sm:inline">Export CSV</span>
-                <span className="sm:hidden">Export</span>
+                <span className="sm:hidden">CSV</span>
+              </button>
+              {/* Export PDF button - available to all users */}
+              <button
+                onClick={exportToPDF}
+                title="Export as PDF for printing or sharing"
+                className="flex items-center justify-center gap-2 px-4 sm:px-5 py-2 sm:py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-lg hover:shadow-xl font-medium border border-blue-500 text-sm sm:text-base"
+              >
+                <Download className="w-3 h-3 sm:w-4 sm:h-4" />
+                <span className="hidden sm:inline">Export PDF</span>
+                <span className="sm:hidden">PDF</span>
               </button>
             </div>
           </div>
@@ -1599,6 +1685,7 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                         </span>
                       ))}
                     </div>
+
                     <div className="text-xs text-slate-500 mt-2">
                       ↑ These can be moved to specific instruments
                     </div>
@@ -1608,11 +1695,10 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
             </div>
           ))}
         </div>
+        </div>
       </div>
     </div>
-  </div>
   );
-};
+}
 
 export default SongDurationTracker;
-export {};
