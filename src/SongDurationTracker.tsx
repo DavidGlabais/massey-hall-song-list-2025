@@ -465,14 +465,21 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
             });
 
             // Only show notification if we're not the ones who made the change
-            setNotification({
-              message: 'Changes made from another session detected. Load the latest data?',
-              onConfirm: () => {
-                setSongs(mergedSongs);
-                setLastSynced(new Date());
-                setNotification(null);
-              }
-            });
+            // Skip notifications for admin users since they're likely the source of changes
+            if (userRole !== 'admin') {
+              setNotification({
+                message: 'Changes made from another session detected. Load the latest data?',
+                onConfirm: () => {
+                  setSongs(mergedSongs);
+                  setLastSynced(new Date());
+                  setNotification(null);
+                }
+              });
+            } else {
+              // For admin users, automatically apply changes without notification
+              setSongs(mergedSongs);
+              setLastSynced(new Date());
+            }
           }
         }
       }
@@ -481,7 +488,7 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
     return () => {
       subscription.unsubscribe();
     };
-  }, [isOnline, songs]);
+  }, [isOnline, songs, userRole]);
 
   // Fix Guest titles - ensure they include the numbers
   const fixGuestTitles = async () => {
