@@ -24,5 +24,5 @@ export interface DatabaseSong {
   created_at?: string;
   updated_at?: string;
   tempo?: string;
-  groove?: string;
+  key?: string;
 }

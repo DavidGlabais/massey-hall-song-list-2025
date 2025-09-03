@@ -21,10 +21,10 @@ export class SongService {
     }
   }
 
-  // Restore tempo and groove data from backup
-  static async restoreTempoAndGroove(songUpdates: { id: number; tempo?: string; groove?: string; }[]): Promise<boolean> {
+  // Restore tempo and key data from backup
+  static async restoreTempoAndKey(songUpdates: { id: number; tempo?: string; key?: string; }[]): Promise<boolean> {
     try {
-      console.debug("[DEBUG] Restoring tempo and groove data for", songUpdates.length, "songs");
+      console.debug("[DEBUG] Restoring tempo and key data for", songUpdates.length, "songs");
       
       // First get all current songs to maintain their data
       const { data: currentSongs, error: fetchError } = await supabase
@@ -45,7 +45,7 @@ export class SongService {
           currentSongs.map(song => ({
             ...song, // Keep all existing data
             tempo: updateMap.get(song.id)?.tempo || song.tempo, // Update tempo if provided
-            groove: updateMap.get(song.id)?.groove || song.groove, // Update groove if provided
+            key: updateMap.get(song.id)?.key || song.key, // Update key if provided
             updated_at: new Date().toISOString()
           })),
           { onConflict: 'id' }
@@ -82,6 +82,8 @@ export class SongService {
         id: song.id,
         title: song.title,
         duration: song.duration,
+        tempo: song.tempo,
+        groove: song.groove,
         players: song.players,
         pdf_url: song.pdf_url || null,  // Using the correct column name
         has_string_arrangement: song.has_string_arrangement || false,
@@ -139,6 +141,8 @@ export class SongService {
           id: song.id,
           title: song.title,
           duration: song.duration,
+          tempo: song.tempo,
+          groove: song.groove,
           players: song.players,
           pdf_url: song.pdf_url,
           has_string_arrangement: song.has_string_arrangement || false,
