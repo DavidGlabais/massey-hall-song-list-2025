@@ -1,6 +1,7 @@
 ﻿import React, { useState } from 'react';
 import SimpleAuth from './components/SimpleAuth';
 import SongDurationTracker from './SongDurationTracker';
+import RestoreData from './restore';
 
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -24,7 +25,12 @@ const App: React.FC = () => {
     return <SimpleAuth onAuthenticated={handleAuthenticated} />;
   }
 
-  return <SongDurationTracker userRole={userRole} onLogout={handleLogout} />;
+  return (
+    <>
+      <RestoreData />
+      <SongDurationTracker userRole={userRole} onLogout={handleLogout} />
+    </>
+  );
 };
 
 export default App;

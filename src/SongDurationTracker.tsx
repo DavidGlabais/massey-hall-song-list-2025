@@ -14,7 +14,7 @@ declare module 'jspdf' {
   }
 }
 
-// Define the Song type
+// Define the Song type (matching DatabaseSong structure with migration support)
 interface Song {
   id: number;
   title: string;
@@ -27,44 +27,18 @@ interface Song {
     vocals: string[];
     backupVocals: string[];
   };
-  pdf_url?: string | null; // Keep for backward compatibility
-  pdf_urls?: string[]; // New field for multiple PDFs
+  pdf_url?: string | null;  // Single PDF URL field matching database schema
   has_string_arrangement?: boolean;
   has_horn_arrangement?: boolean;
+  created_at?: string;
+  updated_at?: string;
+  tempo?: string;
+  groove?: string;
 }
 
-// Helper function to get all PDF URLs for a song (backward compatibility)
-const getSongPdfUrls = (song: Song): string[] => {
-  const urls: string[] = [];
-  
-  // Add URLs from new format
-  if (song.pdf_urls && song.pdf_urls.length > 0) {
-    urls.push(...song.pdf_urls);
-  }
-  
-  // Add URL from legacy format if not already included
-  if (song.pdf_url && !urls.includes(song.pdf_url)) {
-    urls.push(song.pdf_url);
-  }
-  
-  return urls;
-};
-
-// Helper function for database songs
-const getDbSongPdfUrls = (song: DatabaseSong): string[] => {
-  const urls: string[] = [];
-  
-  // Add URLs from new format
-  if (song.pdf_urls && song.pdf_urls.length > 0) {
-    urls.push(...song.pdf_urls);
-  }
-  
-  // Add URL from legacy format if not already included
-  if (song.pdf_url && !urls.includes(song.pdf_url)) {
-    urls.push(song.pdf_url);
-  }
-  
-  return urls;
+// Helper function to get PDF URL for a song
+const getPdfUrl = (song: Song | DatabaseSong): string | null => {
+  return song.pdf_url || null;
 };
 
 // Helper function to check if there are meaningful changes between the current songs and updated songs
@@ -94,10 +68,10 @@ const checkForRealChanges = (currentSongs: any[], updatedSongs: any[]): boolean 
       return true;
     }
 
-    // Check PDF URLs - if we have local PDF URLs, don't consider it a change from the server
-    const currentPdfUrls = getSongPdfUrls(currentSong);
-    const updatedPdfUrls = getSongPdfUrls(updatedSong);
-    if (currentPdfUrls.length > 0 && updatedPdfUrls.length === 0) {
+    // Check PDF URL - if we have a local PDF URL, don't consider it a change from the server
+    const currentPdfUrl = getPdfUrl(currentSong);
+    const updatedPdfUrl = getPdfUrl(updatedSong);
+    if (currentPdfUrl && !updatedPdfUrl) {
       return false;
     }
     
@@ -290,10 +264,11 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
           duration: dbSong.duration,
           interestedPlayers: [], // Keep for legacy compatibility
           players: dbSong.players,
-          pdf_url: dbSong.pdf_url,
-          pdf_urls: dbSong.pdf_urls || [],
+          pdf_url: dbSong.pdf_url || null,
           has_string_arrangement: dbSong.has_string_arrangement || false,
-          has_horn_arrangement: dbSong.has_horn_arrangement || false
+          has_horn_arrangement: dbSong.has_horn_arrangement || false,
+          tempo: dbSong.tempo,
+          groove: dbSong.groove
         }));
         
         setSongs(convertedSongs);
@@ -349,7 +324,9 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
         },
         pdf_url: song.pdf_url,
         has_string_arrangement: song.has_string_arrangement || false,
-        has_horn_arrangement: song.has_horn_arrangement || false
+        has_horn_arrangement: song.has_horn_arrangement || false,
+        tempo: song.tempo,
+        groove: song.groove
       }));
       
       const success = await SongService.saveAllSongs(dbSongs);
@@ -445,12 +422,11 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
             // Create a merged version that preserves local PDF URLs
             const mergedSongs = updatedSongs.map(dbSong => {
               const currentSong = songs.find(s => s.id === dbSong.id);
-              const currentPdfUrls = currentSong ? getSongPdfUrls(currentSong) : [];
-              const dbPdfUrls = getDbSongPdfUrls(dbSong);
+              const currentPdfUrl = currentSong ? getPdfUrl(currentSong) : null;
+              const dbPdfUrl = getPdfUrl(dbSong);
               
-              // Merge PDF URLs, keeping local ones first
-              const urlSet = new Set([...currentPdfUrls, ...dbPdfUrls]);
-              const mergedPdfUrls = Array.from(urlSet);
+              // Keep current PDF URL if it exists, otherwise use the DB one
+              const finalPdfUrl = currentPdfUrl || dbPdfUrl;
               
               return {
                 id: dbSong.id,
@@ -458,9 +434,8 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                 duration: dbSong.duration,
                 interestedPlayers: [],
                 players: dbSong.players,
-                // Keep local PDF URL if it exists
-                pdf_url: currentSong?.pdf_url || dbSong.pdf_url,
-                pdf_urls: mergedPdfUrls
+                // Keep local PDF URL if it exists, otherwise use DB URL
+                pdf_url: finalPdfUrl
               };
             });
 
@@ -633,6 +608,64 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
     ));
   };
 
+  const updateSongDetail = async (id: number, field: 'tempo' | 'groove', value: string) => {
+    console.debug(`[DEBUG] updateSongDetail called - id: ${id}, field: ${field}, value: ${value}`);
+    
+    // Block function if user is not admin
+    if (userRole !== 'admin') {
+      console.warn('[WARN] Non-admin user attempted to edit song details');
+      alert('Only admin users can edit song details.');
+      return;
+    }
+    
+    const songToUpdate = songs.find(s => s.id === id);
+    if (!songToUpdate) {
+      console.error(`[ERROR] Song with id ${id} not found`);
+      return;
+    }
+    
+    console.debug('[DEBUG] Current song data:', songToUpdate);
+
+    // Create updated song with new field value
+    const updatedSong: DatabaseSong = {
+      id: songToUpdate.id,
+      title: songToUpdate.title,
+      duration: songToUpdate.duration,
+      players: songToUpdate.players || {
+        electricGuitar: [],
+        acousticGuitar: [],
+        bass: [],
+        vocals: [],
+        backupVocals: []
+      },
+      pdf_url: songToUpdate.pdf_url || null,
+      has_string_arrangement: songToUpdate.has_string_arrangement,
+      has_horn_arrangement: songToUpdate.has_horn_arrangement,
+      tempo: field === 'tempo' ? value : songToUpdate.tempo,
+      groove: field === 'groove' ? value : songToUpdate.groove,
+      created_at: songToUpdate.created_at,
+      updated_at: new Date().toISOString()
+    };
+
+    console.debug(`[DEBUG] Updating song ${id} - ${field}:`, value);
+    console.debug('[DEBUG] Updated song object:', updatedSong);
+    
+    // Update local state
+    setSongs(songs.map(song => 
+      song.id === id ? { ...song, [field]: value } : song
+    ));
+
+    // Save to database
+    const saveResult = await SongService.saveSong(updatedSong);
+    console.debug('[DEBUG] Save result:', saveResult);
+    
+    if (!saveResult) {
+      console.error('[ERROR] Failed to save to database');
+      // Optionally show an error to the user
+      alert('Failed to save changes. Please try again.');
+    }
+  };
+
   const addSong = () => {
     // Block function if user is not admin
     if (userRole !== 'admin') {
@@ -675,15 +708,12 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
       if (url) {
         console.debug('[DEBUG] PDF uploaded successfully, URL:', url);
         
-        // Update local state with multiple PDF support
+        // Update local state with single PDF URL
         const updatedSongs = songs.map(song => {
           if (song.id === songId) {
-            const currentPdfUrls = getSongPdfUrls(song);
-            const newPdfUrls = [...currentPdfUrls, url];
             return { 
               ...song, 
-              pdf_url: url, // Keep for backward compatibility
-              pdf_urls: newPdfUrls 
+              pdf_url: url  // Single PDF URL
             };
           }
           return song;
@@ -705,9 +735,10 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
               backupVocals: []
             },
             pdf_url: url,
-            pdf_urls: songToUpdate.pdf_urls,
             has_string_arrangement: songToUpdate.has_string_arrangement || false,
-            has_horn_arrangement: songToUpdate.has_horn_arrangement || false
+            has_horn_arrangement: songToUpdate.has_horn_arrangement || false,
+            tempo: songToUpdate.tempo,
+            groove: songToUpdate.groove
           });
         }
       }
@@ -717,17 +748,13 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
     }
   };
 
-  // Remove a specific PDF from a song
+  // Remove PDF from a song
   const removePdf = async (songId: number, pdfUrl: string) => {
     const updatedSongs = songs.map(song => {
       if (song.id === songId) {
-        const currentPdfUrls = getSongPdfUrls(song);
-        const filteredUrls = currentPdfUrls.filter(url => url !== pdfUrl);
-        
         return { 
           ...song, 
-          pdf_url: filteredUrls.length > 0 ? filteredUrls[0] : null, // Keep first for backward compatibility
-          pdf_urls: filteredUrls.length > 0 ? filteredUrls : []
+          pdf_url: null  // Clear the PDF URL
         };
       }
       return song;
@@ -748,10 +775,11 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
           vocals: [],
           backupVocals: []
         },
-        pdf_url: songToUpdate.pdf_url,
-        pdf_urls: songToUpdate.pdf_urls,
+        pdf_url: null,
         has_string_arrangement: songToUpdate.has_string_arrangement || false,
-        has_horn_arrangement: songToUpdate.has_horn_arrangement || false
+        has_horn_arrangement: songToUpdate.has_horn_arrangement || false,
+        tempo: songToUpdate.tempo,
+        groove: songToUpdate.groove
       });
     }
   };
@@ -1141,7 +1169,7 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                           </div>
                         )}
                         {/* PDF Section - Combined upload and view */}
-                        {(userRole === 'admin' || getSongPdfUrls(song).length > 0) && (
+                        {(userRole === 'admin' || song.pdf_url) && (
                           <div className="mb-4">
                             <label className="block text-xs font-semibold text-amber-400 mb-2">Sheet Music PDF</label>
                             <div className="flex items-center gap-2 flex-wrap">
@@ -1165,21 +1193,21 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                                 </>
                               )}
                               
-                              {/* View buttons for all PDFs - in the same row */}
-                              {getSongPdfUrls(song).map((pdfUrl, index) => (
-                                <div key={index} className="flex items-center gap-1">
+                              {/* View PDF button */}
+                              {song.pdf_url && (
+                                <div className="flex items-center gap-1">
                                   <a
-                                    href={pdfUrl}
+                                    href={song.pdf_url}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-900/40 hover:bg-amber-900/60 text-amber-300 text-xs font-medium rounded-md border border-amber-700/50 transition-colors"
                                   >
                                     <Download className="w-3 h-3" />
-                                    View PDF {getSongPdfUrls(song).length > 1 ? `#${index + 1}` : ''}
+                                    View PDF
                                   </a>
                                   {userRole === 'admin' && (
                                     <button
-                                      onClick={() => removePdf(song.id, pdfUrl)}
+                                      onClick={() => removePdf(song.id, song.pdf_url || '')}
                                       className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-900/40 rounded-md transition-colors"
                                       title="Remove PDF"
                                     >
@@ -1187,7 +1215,7 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                                     </button>
                                   )}
                                 </div>
-                              ))}
+                              )}
                             </div>
                           </div>
                         )}
@@ -1365,7 +1393,7 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                         {/* Arrangement Details */}
                         <div className="mt-3 p-3 bg-slate-700/60 border border-slate-600 rounded-lg">
                           <div className="text-sm font-semibold text-amber-400 mb-2">Arrangements:</div>
-                          <div className="flex gap-4">
+                          <div className="flex gap-4 mb-4">
                             <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
                               <input
                                 type="checkbox"
@@ -1395,6 +1423,32 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                                 }}
                               />
                               Horn Arrangement
+                            </label>
+                          </div>
+
+                          {/* Row of metadata fields */}
+                          <div className="flex gap-4 items-center mt-4">
+                            <label className="flex items-center gap-2 text-sm text-slate-300">
+                              <span className="text-sm font-semibold text-amber-400">Tempo:</span>
+                              <input
+                                type="text"
+                                value={song.tempo || ''}
+                                onChange={(e) => updateSongDetail(song.id, 'tempo', e.target.value)}
+                                disabled={userRole !== 'admin'}
+                                placeholder={userRole === 'admin' ? "120bpm" : "-"}
+                                className="w-24 px-2 py-1 bg-slate-700/40 text-slate-200 rounded border border-slate-600 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                              />
+                            </label>
+                            <label className="flex items-center gap-2 text-sm text-slate-300">
+                              <span className="text-sm font-semibold text-amber-400">Key:</span>
+                              <input
+                                type="text"
+                                value={song.groove || ''}
+                                onChange={(e) => updateSongDetail(song.id, 'groove', e.target.value)}
+                                disabled={userRole !== 'admin'}
+                                placeholder={userRole === 'admin' ? "G minor" : "-"}
+                                className="w-24 px-2 py-1 bg-slate-700/40 text-slate-200 rounded border border-slate-600 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                              />
                             </label>
                           </div>
                         </div>
@@ -1493,7 +1547,7 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
               )}
 
               {/* PDF Section - Combined upload and view */}
-              {(userRole === 'admin' || getSongPdfUrls(song).length > 0) && (
+              {(userRole === 'admin' || song.pdf_url) && (
                 <div className="mb-4">
                   <label className="block text-xs font-semibold text-amber-400 mb-2">Sheet Music PDF</label>
                   <div className="flex items-center gap-2 flex-wrap">
@@ -1517,21 +1571,21 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                       </>
                     )}
                     
-                    {/* View buttons for all PDFs - in the same row */}
-                    {getSongPdfUrls(song).map((pdfUrl, index) => (
-                      <div key={index} className="flex items-center gap-1">
+                    {/* View PDF button */}
+                    {song.pdf_url && (
+                      <div className="flex items-center gap-1">
                         <a
-                          href={pdfUrl}
+                          href={song.pdf_url}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-900/40 hover:bg-amber-900/60 text-amber-300 text-xs font-medium rounded-md border border-amber-700/50 transition-colors"
                         >
                           <Download className="w-3 h-3" />
-                          View PDF {getSongPdfUrls(song).length > 1 ? `#${index + 1}` : ''}
+                          View PDF
                         </a>
                         {userRole === 'admin' && (
                           <button
-                            onClick={() => removePdf(song.id, pdfUrl)}
+                            onClick={() => removePdf(song.id, song.pdf_url || '')}
                             className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-900/40 rounded-md transition-colors"
                             title="Remove PDF"
                           >
@@ -1539,7 +1593,7 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                           </button>
                         )}
                       </div>
-                    ))}
+                    )}
                   </div>
                 </div>
               )}

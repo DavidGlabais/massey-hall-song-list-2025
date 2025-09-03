@@ -21,37 +21,111 @@ export class SongService {
     }
   }
 
+  // Restore tempo and groove data from backup
+  static async restoreTempoAndGroove(songUpdates: { id: number; tempo?: string; groove?: string; }[]): Promise<boolean> {
+    try {
+      console.debug("[DEBUG] Restoring tempo and groove data for", songUpdates.length, "songs");
+      
+      // First get all current songs to maintain their data
+      const { data: currentSongs, error: fetchError } = await supabase
+        .from("songs")
+        .select("*")
+        .in("id", songUpdates.map(u => u.id));
+      
+      if (fetchError) throw fetchError;
+      if (!currentSongs) throw new Error("Could not fetch current songs");
+
+      // Create a map for quick lookup
+      const updateMap = new Map(songUpdates.map(u => [u.id, u]));
+      
+      // Update each song, maintaining existing data
+      const { error } = await supabase
+        .from("songs")
+        .upsert(
+          currentSongs.map(song => ({
+            ...song, // Keep all existing data
+            tempo: updateMap.get(song.id)?.tempo || song.tempo, // Update tempo if provided
+            groove: updateMap.get(song.id)?.groove || song.groove, // Update groove if provided
+            updated_at: new Date().toISOString()
+          })),
+          { onConflict: 'id' }
+        );
+      
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error("Error restoring tempo and groove data:", error);
+      return false;
+    }
+  }
+
   // Save/update a song
   static async saveSong(song: DatabaseSong): Promise<boolean> {
     try {
-      console.debug("[DEBUG] SongService.saveSong() called for id", song.id, "with pdf_url:", song.pdf_url);
+      console.debug("[DEBUG] SongService.saveSong() called for id", song.id);
       
-      // Build the data object, only including pdf_urls if it exists
-      const songData: any = {
+      // Validate required fields
+      if (!song.id || !song.title || !song.duration || !song.players) {
+        console.error("[ERROR] Missing required fields:", {
+          hasId: !!song.id,
+          hasTitle: !!song.title,
+          hasDuration: !!song.duration,
+          hasPlayers: !!song.players
+        });
+        return false;
+      }
+      
+      console.debug("[DEBUG] Full song data:", JSON.stringify(song, null, 2));
+      
+      // Build the data object with only the fields we want to update
+      const songData = {
         id: song.id,
         title: song.title,
         duration: song.duration,
         players: song.players,
-        pdf_url: song.pdf_url,
+        pdf_url: song.pdf_url || null,  // Using the correct column name
         has_string_arrangement: song.has_string_arrangement || false,
         has_horn_arrangement: song.has_horn_arrangement || false,
+        tempo: song.tempo || null,
+        groove: song.groove || null,
         updated_at: new Date().toISOString()
       };
       
-      // Only include pdf_urls if the song has this field to avoid database errors
-      if (song.pdf_urls !== undefined) {
-        songData.pdf_urls = song.pdf_urls;
-      }
-      
+      console.debug("[DEBUG] Calling Supabase upsert with data:", {
+        table: "songs",
+        data: songData,
+        method: "upsert"
+      });
       const { error } = await supabase
         .from("songs")
-        .upsert(songData)
+        .upsert(songData, { 
+          onConflict: "id"
+        })
       
-      if (error) throw error
-      return true
-    } catch (error) {
-      console.error("Error saving song:", error)
-      return false
+      if (error) {
+        console.error("[ERROR] Supabase upsert failed:", {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        });
+        // Log the full songData that caused the error
+        console.error("[ERROR] Failed data:", songData);
+        throw error;
+      }
+      console.debug("[DEBUG] Supabase upsert successful");
+      return true;
+    } catch (error: any) {
+      console.error("[ERROR] Error saving song:", {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+        response: error.response,
+        statusCode: error?.response?.status,
+        statusText: error?.response?.statusText,
+        responseData: error?.response?.data
+      });
+      return false;
     }
   }
 

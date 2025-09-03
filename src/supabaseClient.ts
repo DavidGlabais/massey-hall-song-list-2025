@@ -18,10 +18,11 @@ export interface DatabaseSong {
     vocals: string[];
     backupVocals: string[];
   };
-  pdf_url?: string | null;
-  pdf_urls?: string[]; // New field for multiple PDFs
+  pdf_url?: string | null;  // Single PDF URL field matching database schema
   has_string_arrangement?: boolean;
   has_horn_arrangement?: boolean;
   created_at?: string;
   updated_at?: string;
+  tempo?: string;
+  groove?: string;
 }
