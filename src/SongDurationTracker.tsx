@@ -1372,7 +1372,11 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                                 checked={song.has_string_arrangement || false}
                                 onChange={(e) => updateSongArrangement(song.id, 'has_string_arrangement', e.target.checked)}
                                 disabled={userRole !== 'admin'}
-                                className="w-4 h-4 text-amber-500 bg-slate-700 border-slate-600 rounded focus:ring-amber-500 focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                className={`w-4 h-4 rounded focus:ring-2 ${
+                                  userRole === 'admin' 
+                                    ? 'text-amber-500 bg-slate-700 border-slate-600 focus:ring-amber-500 cursor-pointer' 
+                                    : 'text-cyan-400 bg-slate-800 border-slate-500 focus:ring-cyan-400 cursor-not-allowed'
+                                }`}
                               />
                               String Arrangement
                             </label>
@@ -1382,7 +1386,11 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                                 checked={song.has_horn_arrangement || false}
                                 onChange={(e) => updateSongArrangement(song.id, 'has_horn_arrangement', e.target.checked)}
                                 disabled={userRole !== 'admin'}
-                                className="w-4 h-4 text-amber-500 bg-slate-700 border-slate-600 rounded focus:ring-amber-500 focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                className={`w-4 h-4 rounded focus:ring-2 ${
+                                  userRole === 'admin' 
+                                    ? 'text-amber-500 bg-slate-700 border-slate-600 focus:ring-amber-500 cursor-pointer' 
+                                    : 'text-cyan-400 bg-slate-800 border-slate-500 focus:ring-cyan-400 cursor-not-allowed'
+                                }`}
                               />
                               Horn Arrangement
                             </label>
@@ -1561,7 +1569,11 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                       checked={song.has_string_arrangement || false}
                       onChange={(e) => updateSongArrangement(song.id, 'has_string_arrangement', e.target.checked)}
                       disabled={userRole !== 'admin'}
-                      className="w-4 h-4 text-amber-500 bg-slate-700 border-slate-600 rounded focus:ring-amber-500 focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className={`w-4 h-4 rounded focus:ring-2 ${
+                        userRole === 'admin' 
+                          ? 'text-amber-500 bg-slate-700 border-slate-600 focus:ring-amber-500 cursor-pointer' 
+                          : 'text-cyan-400 bg-slate-800 border-slate-500 focus:ring-cyan-400 cursor-not-allowed'
+                      }`}
                     />
                     String Arrangement
                   </label>
@@ -1571,7 +1583,11 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                       checked={song.has_horn_arrangement || false}
                       onChange={(e) => updateSongArrangement(song.id, 'has_horn_arrangement', e.target.checked)}
                       disabled={userRole !== 'admin'}
-                      className="w-4 h-4 text-amber-500 bg-slate-700 border-slate-600 rounded focus:ring-amber-500 focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className={`w-4 h-4 rounded focus:ring-2 ${
+                        userRole === 'admin' 
+                          ? 'text-amber-500 bg-slate-700 border-slate-600 focus:ring-amber-500 cursor-pointer' 
+                          : 'text-cyan-400 bg-slate-800 border-slate-500 focus:ring-cyan-400 cursor-not-allowed'
+                      }`}
                     />
                     Horn Arrangement
                   </label>
