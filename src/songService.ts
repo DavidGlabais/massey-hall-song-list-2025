@@ -22,7 +22,7 @@ export class SongService {
   }
 
   // Restore tempo and key data from backup
-  static async restoreTempoAndKey(songUpdates: { id: number; tempo?: string; key?: string; }[]): Promise<boolean> {
+  static async restoreTempoAndGroove(songUpdates: { id: number; tempo?: string; groove?: string; }[]): Promise<boolean> {
     try {
       console.debug("[DEBUG] Restoring tempo and key data for", songUpdates.length, "songs");
       
@@ -45,7 +45,7 @@ export class SongService {
           currentSongs.map(song => ({
             ...song, // Keep all existing data
             tempo: updateMap.get(song.id)?.tempo || song.tempo, // Update tempo if provided
-            key: updateMap.get(song.id)?.key || song.key, // Update key if provided
+            groove: updateMap.get(song.id)?.groove || song.groove, // Update groove if provided
             updated_at: new Date().toISOString()
           })),
           { onConflict: 'id' }
@@ -54,7 +54,7 @@ export class SongService {
       if (error) throw error;
       return true;
     } catch (error) {
-      console.error("Error restoring tempo and groove data:", error);
+      console.error("Error restoring tempo and key data:", error);
       return false;
     }
   }
@@ -82,14 +82,14 @@ export class SongService {
         id: song.id,
         title: song.title,
         duration: song.duration,
-        tempo: song.tempo,
-        groove: song.groove,
+        tempo: song.tempo || null,
+        groove: song.groove || null,
         players: song.players,
         pdf_url: song.pdf_url || null,  // Using the correct column name
         has_string_arrangement: song.has_string_arrangement || false,
         has_horn_arrangement: song.has_horn_arrangement || false,
-        tempo: song.tempo || null,
-        groove: song.groove || null,
+        has_piano_arrangement: song.has_piano_arrangement || false,
+        has_keys_arrangement: song.has_keys_arrangement || false,
         updated_at: new Date().toISOString()
       };
       
@@ -147,6 +147,8 @@ export class SongService {
           pdf_url: song.pdf_url,
           has_string_arrangement: song.has_string_arrangement || false,
           has_horn_arrangement: song.has_horn_arrangement || false,
+          has_piano_arrangement: song.has_piano_arrangement || false,
+          has_keys_arrangement: song.has_keys_arrangement || false,
           updated_at: new Date().toISOString()
         })))
       

@@ -21,8 +21,10 @@ export interface DatabaseSong {
   pdf_url?: string | null;  // Single PDF URL field matching database schema
   has_string_arrangement?: boolean;
   has_horn_arrangement?: boolean;
+  has_piano_arrangement?: boolean;
+  has_keys_arrangement?: boolean;
   created_at?: string;
   updated_at?: string;
   tempo?: string;
-  key?: string;
+  groove?: string;
 }

@@ -4,6 +4,7 @@ import { SongService } from './songService';
 import { supabase } from './supabaseClient';
 import type { DatabaseSong } from './supabaseClient';
 import { Notification } from './components/Notification';
+import RestoreData from './restore';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -30,10 +31,12 @@ interface Song {
   pdf_url?: string | null;  // Single PDF URL field matching database schema
   has_string_arrangement?: boolean;
   has_horn_arrangement?: boolean;
+  has_piano_arrangement?: boolean;
+  has_keys_arrangement?: boolean;
   created_at?: string;
   updated_at?: string;
   tempo?: string;
-  key?: string;
+  groove?: string;
 }
 
 // Helper function to get PDF URL for a song
@@ -175,13 +178,7 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
   // Timestamp when the current sync started (ms)
   const syncingStartRef = useRef<number | null>(null);
 
-  // Manual force-clear for stuck syncs
-  const forceClearSync = () => {
-    console.warn('[WARN] forceClearSync() called - clearing syncing flags');
-    isSyncingRef.current = false;
-    syncingStartRef.current = null;
-    setIsSyncing(false);
-  };
+
 
   // Save to localStorage whenever songs change
   useEffect(() => {
@@ -201,6 +198,21 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
     syncingStartRef.current = Date.now();
     console.debug('[DEBUG] loadFromDatabase - set isSyncing true');
     try {
+      // Check if Piano and Keys arrangement columns exist
+      try {
+        const { data: columnTest, error: columnError } = await supabase
+          .from('songs')
+          .select('has_piano_arrangement, has_keys_arrangement')
+          .limit(1);
+          
+        if (columnError && columnError.message.includes('column') && columnError.message.includes('does not exist')) {
+          console.warn('⚠️ Missing Piano/Keys arrangement columns. Please run this SQL in Supabase:');
+          console.warn('ALTER TABLE songs ADD COLUMN IF NOT EXISTS has_piano_arrangement BOOLEAN DEFAULT false, ADD COLUMN IF NOT EXISTS has_keys_arrangement BOOLEAN DEFAULT false;');
+        }
+      } catch (columnCheckError) {
+        console.warn('Could not check for arrangement columns:', columnCheckError);
+      }
+      
       const dbSongs = await SongService.getAllSongs();
       if (dbSongs.length > 0) {
         // Check for duplicates before loading
@@ -267,6 +279,8 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
           pdf_url: dbSong.pdf_url || null,
           has_string_arrangement: dbSong.has_string_arrangement || false,
           has_horn_arrangement: dbSong.has_horn_arrangement || false,
+          has_piano_arrangement: dbSong.has_piano_arrangement || false,
+          has_keys_arrangement: dbSong.has_keys_arrangement || false,
           tempo: dbSong.tempo,
           groove: dbSong.groove
         }));
@@ -325,6 +339,8 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
         pdf_url: song.pdf_url,
         has_string_arrangement: song.has_string_arrangement || false,
         has_horn_arrangement: song.has_horn_arrangement || false,
+        has_piano_arrangement: song.has_piano_arrangement || false,
+        has_keys_arrangement: song.has_keys_arrangement || false,
         tempo: song.tempo,
         groove: song.groove
       }));
@@ -439,7 +455,9 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                 // Keep local PDF URL if it exists, otherwise use DB URL
                 pdf_url: finalPdfUrl,
                 has_string_arrangement: dbSong.has_string_arrangement || false,
-                has_horn_arrangement: dbSong.has_horn_arrangement || false
+                has_horn_arrangement: dbSong.has_horn_arrangement || false,
+                has_piano_arrangement: dbSong.has_piano_arrangement || false,
+                has_keys_arrangement: dbSong.has_keys_arrangement || false
               };
             });
 
@@ -600,7 +618,7 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
     ));
   };
 
-  const updateSongArrangement = (id: number, field: 'has_string_arrangement' | 'has_horn_arrangement', value: boolean) => {
+  const updateSongArrangement = (id: number, field: 'has_string_arrangement' | 'has_horn_arrangement' | 'has_piano_arrangement' | 'has_keys_arrangement', value: boolean) => {
     // Block function if user is not admin
     if (userRole !== 'admin') {
       alert('Only admin users can edit song details.');
@@ -612,63 +630,7 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
     ));
   };
 
-  const updateSongDetail = async (id: number, field: 'tempo' | 'key', value: string) => {
-    console.debug(`[DEBUG] updateSongDetail called - id: ${id}, field: ${field}, value: ${value}`);
-    
-    // Block function if user is not admin
-    if (userRole !== 'admin') {
-      console.warn('[WARN] Non-admin user attempted to edit song details');
-      alert('Only admin users can edit song details.');
-      return;
-    }
-    
-    const songToUpdate = songs.find(s => s.id === id);
-    if (!songToUpdate) {
-      console.error(`[ERROR] Song with id ${id} not found`);
-      return;
-    }
-    
-    console.debug('[DEBUG] Current song data:', songToUpdate);
 
-    // Create updated song with new field value
-    const updatedSong: DatabaseSong = {
-      id: songToUpdate.id,
-      title: songToUpdate.title,
-      duration: songToUpdate.duration,
-      players: songToUpdate.players || {
-        electricGuitar: [],
-        acousticGuitar: [],
-        bass: [],
-        vocals: [],
-        backupVocals: []
-      },
-      pdf_url: songToUpdate.pdf_url || null,
-      has_string_arrangement: songToUpdate.has_string_arrangement,
-      has_horn_arrangement: songToUpdate.has_horn_arrangement,
-      tempo: field === 'tempo' ? value : songToUpdate.tempo,
-      key: field === 'key' ? value : songToUpdate.key,
-      created_at: songToUpdate.created_at,
-      updated_at: new Date().toISOString()
-    };
-
-    console.debug(`[DEBUG] Updating song ${id} - ${field}:`, value);
-    console.debug('[DEBUG] Updated song object:', updatedSong);
-    
-    // Update local state
-    setSongs(songs.map(song => 
-      song.id === id ? { ...song, [field]: value } : song
-    ));
-
-    // Save to database
-    const saveResult = await SongService.saveSong(updatedSong);
-    console.debug('[DEBUG] Save result:', saveResult);
-    
-    if (!saveResult) {
-      console.error('[ERROR] Failed to save to database');
-      // Optionally show an error to the user
-      alert('Failed to save changes. Please try again.');
-    }
-  };
 
   const addSong = () => {
     // Block function if user is not admin
@@ -1147,8 +1109,6 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                   <th className="px-6 py-4 text-left text-sm font-semibold text-amber-400 w-20">Song #</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-amber-400">Title & Players</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-amber-400 w-32">Duration (M:SS)</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-amber-400 w-24">Tempo</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-amber-400 w-20">Key</th>
                   <th className="px-6 py-4 text-center text-sm font-semibold text-amber-400 w-20">Action</th>
                 </tr>
               </thead>
@@ -1404,13 +1364,15 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                               <input
                                 type="checkbox"
                                 checked={song.has_string_arrangement || false}
-                                onChange={(e) => updateSongArrangement(song.id, 'has_string_arrangement', e.target.checked)}
-                                disabled={userRole !== 'admin'}
-                                className="w-4 h-4 rounded focus:ring-2 focus:ring-green-500"
+                                onChange={(e) => userRole === 'admin' ? updateSongArrangement(song.id, 'has_string_arrangement', e.target.checked) : null}
+                                className="w-4 h-4 rounded focus:ring-2 focus:ring-green-500 bg-green-600 border-green-700 accent-green-600"
                                 style={{
-                                  backgroundColor: '#16a34a',
-                                  borderColor: '#15803d',
-                                  accentColor: '#16a34a'
+                                  backgroundColor: '#16a34a !important',
+                                  borderColor: '#15803d !important',
+                                  accentColor: '#16a34a !important',
+                                  opacity: '1 !important',
+                                  filter: 'none !important',
+                                  pointerEvents: userRole !== 'admin' ? 'none' : 'auto'
                                 }}
                               />
                               String Arrangement
@@ -1419,16 +1381,52 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                               <input
                                 type="checkbox"
                                 checked={song.has_horn_arrangement || false}
-                                onChange={(e) => updateSongArrangement(song.id, 'has_horn_arrangement', e.target.checked)}
-                                disabled={userRole !== 'admin'}
-                                className="w-4 h-4 rounded focus:ring-2 focus:ring-green-500"
+                                onChange={(e) => userRole === 'admin' ? updateSongArrangement(song.id, 'has_horn_arrangement', e.target.checked) : null}
+                                className="w-4 h-4 rounded focus:ring-2 focus:ring-green-500 bg-green-600 border-green-700 accent-green-600"
                                 style={{
-                                  backgroundColor: '#16a34a',
-                                  borderColor: '#15803d',
-                                  accentColor: '#16a34a'
+                                  backgroundColor: '#16a34a !important',
+                                  borderColor: '#15803d !important',
+                                  accentColor: '#16a34a !important',
+                                  opacity: '1 !important',
+                                  filter: 'none !important',
+                                  pointerEvents: userRole !== 'admin' ? 'none' : 'auto'
                                 }}
                               />
                               Horn Arrangement
+                            </label>
+                            <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={song.has_piano_arrangement || false}
+                                onChange={(e) => userRole === 'admin' ? updateSongArrangement(song.id, 'has_piano_arrangement', e.target.checked) : null}
+                                className="w-4 h-4 rounded focus:ring-2 focus:ring-green-500 bg-green-600 border-green-700 accent-green-600"
+                                style={{
+                                  backgroundColor: '#16a34a !important',
+                                  borderColor: '#15803d !important',
+                                  accentColor: '#16a34a !important',
+                                  opacity: '1 !important',
+                                  filter: 'none !important',
+                                  pointerEvents: userRole !== 'admin' ? 'none' : 'auto'
+                                }}
+                              />
+                              Piano
+                            </label>
+                            <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={song.has_keys_arrangement || false}
+                                onChange={(e) => userRole === 'admin' ? updateSongArrangement(song.id, 'has_keys_arrangement', e.target.checked) : null}
+                                className="w-4 h-4 rounded focus:ring-2 focus:ring-green-500 bg-green-600 border-green-700 accent-green-600"
+                                style={{
+                                  backgroundColor: '#16a34a !important',
+                                  borderColor: '#15803d !important',
+                                  accentColor: '#16a34a !important',
+                                  opacity: '1 !important',
+                                  filter: 'none !important',
+                                  pointerEvents: userRole !== 'admin' ? 'none' : 'auto'
+                                }}
+                              />
+                              Keys
                             </label>
                           </div>
 
@@ -1439,21 +1437,27 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                               <input
                                 type="text"
                                 value={song.tempo || ''}
-                                onChange={(e) => updateSongDetail(song.id, 'tempo', e.target.value)}
-                                disabled={userRole !== 'admin'}
-                                placeholder={userRole === 'admin' ? "120bpm" : "-"}
-                                className="w-24 px-2 py-1 bg-slate-700/40 text-slate-200 rounded border border-slate-600 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                                onChange={(e) => updateSong(song.id, 'tempo', e.target.value)}
+                                readOnly={userRole !== 'admin'}
+                                className={`w-24 px-2 py-1 text-white rounded border border-slate-600 ${
+                                  userRole === 'admin'
+                                    ? 'bg-slate-700/50 focus:ring-2 focus:ring-amber-500 focus:border-amber-500'
+                                    : 'bg-slate-800/60'
+                                }`}
                               />
                             </label>
                             <label className="flex items-center gap-2 text-sm text-slate-300">
                               <span className="text-sm font-semibold text-amber-400">Key:</span>
                               <input
                                 type="text"
-                                value={song.key || ''}
-                                onChange={(e) => updateSongDetail(song.id, 'key', e.target.value)}
-                                disabled={userRole !== 'admin'}
-                                placeholder={userRole === 'admin' ? "G minor" : "-"}
-                                className="w-24 px-2 py-1 bg-slate-700/40 text-slate-200 rounded border border-slate-600 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                                value={song.groove || ''}
+                                onChange={(e) => updateSong(song.id, 'groove', e.target.value)}
+                                readOnly={userRole !== 'admin'}
+                                className={`w-24 px-2 py-1 text-white rounded border border-slate-600 ${
+                                  userRole === 'admin'
+                                    ? 'bg-slate-700/50 focus:ring-2 focus:ring-amber-500 focus:border-amber-500'
+                                    : 'bg-slate-800/60'
+                                }`}
                               />
                             </label>
                           </div>
@@ -1501,34 +1505,6 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                         }`}
                         placeholder="4:35"
                         pattern="[0-9]+:[0-5][0-9]"
-                      />
-                    </td>
-                    <td className="px-4 py-3">
-                      <input
-                        type="text"
-                        value={song.tempo || ''}
-                        onChange={(e) => updateSong(song.id, 'tempo', e.target.value)}
-                        readOnly={userRole !== 'admin'}
-                        className={`w-full p-2 text-sm border border-slate-600 rounded text-white placeholder-slate-400 ${
-                          userRole === 'admin' 
-                            ? 'bg-slate-700/50 focus:ring-2 focus:ring-amber-500 focus:border-amber-500' 
-                            : 'bg-slate-800/60 cursor-not-allowed'
-                        }`}
-                        placeholder="120 BPM"
-                      />
-                    </td>
-                    <td className="px-4 py-3">
-                      <input
-                        type="text"
-                        value={song.groove || ''}
-                        onChange={(e) => updateSong(song.id, 'groove', e.target.value)}
-                        readOnly={userRole !== 'admin'}
-                        className={`w-full p-2 text-sm border border-slate-600 rounded text-white placeholder-slate-400 ${
-                          userRole === 'admin' 
-                            ? 'bg-slate-700/50 focus:ring-2 focus:ring-amber-500 focus:border-amber-500' 
-                            : 'bg-slate-800/60 cursor-not-allowed'
-                        }`}
-                        placeholder="Swing"
                       />
                     </td>
                     <td className="px-4 py-3 text-center">
@@ -1649,39 +1625,6 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                 />
               </div>
 
-              <div className="mb-4 grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-amber-400 mb-2">Tempo</label>
-                  <input
-                    type="text"
-                    value={song.tempo || ''}
-                    onChange={(e) => updateSong(song.id, 'tempo', e.target.value)}
-                    readOnly={userRole !== 'admin'}
-                    className={`w-full p-2 text-sm border border-slate-600 rounded-lg text-white placeholder-slate-400 ${
-                      userRole === 'admin' 
-                        ? 'bg-slate-700/50 focus:ring-2 focus:ring-amber-500 focus:border-amber-500' 
-                        : 'bg-slate-800/60 cursor-not-allowed'
-                    }`}
-                    placeholder="120 BPM"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-amber-400 mb-2">Groove</label>
-                  <input
-                    type="text"
-                    value={song.groove || ''}
-                    onChange={(e) => updateSong(song.id, 'groove', e.target.value)}
-                    readOnly={userRole !== 'admin'}
-                    className={`w-full p-2 text-sm border border-slate-600 rounded-lg text-white placeholder-slate-400 ${
-                      userRole === 'admin' 
-                        ? 'bg-slate-700/50 focus:ring-2 focus:ring-amber-500 focus:border-amber-500' 
-                        : 'bg-slate-800/60 cursor-not-allowed'
-                    }`}
-                    placeholder="Swing"
-                  />
-                </div>
-              </div>
-
               {/* Arrangement Details */}
               <div className="mb-4">
                 <label className="block text-xs font-semibold text-amber-400 mb-2">Arrangements</label>
@@ -1690,13 +1633,15 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                     <input
                       type="checkbox"
                       checked={song.has_string_arrangement || false}
-                      onChange={(e) => updateSongArrangement(song.id, 'has_string_arrangement', e.target.checked)}
-                      disabled={userRole !== 'admin'}
-                      className="w-4 h-4 rounded focus:ring-2 focus:ring-green-500"
+                      onChange={(e) => userRole === 'admin' ? updateSongArrangement(song.id, 'has_string_arrangement', e.target.checked) : null}
+                      className="w-4 h-4 rounded focus:ring-2 focus:ring-green-500 bg-green-600 border-green-700 accent-green-600"
                       style={{
-                        backgroundColor: '#16a34a',
-                        borderColor: '#15803d',
-                        accentColor: '#16a34a'
+                        backgroundColor: '#16a34a !important',
+                        borderColor: '#15803d !important',
+                        accentColor: '#16a34a !important',
+                        opacity: '1 !important',
+                        filter: 'none !important',
+                        pointerEvents: userRole !== 'admin' ? 'none' : 'auto'
                       }}
                     />
                     String Arrangement
@@ -1705,16 +1650,86 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
                     <input
                       type="checkbox"
                       checked={song.has_horn_arrangement || false}
-                      onChange={(e) => updateSongArrangement(song.id, 'has_horn_arrangement', e.target.checked)}
-                      disabled={userRole !== 'admin'}
-                      className="w-4 h-4 rounded focus:ring-2 focus:ring-green-500"
+                      onChange={(e) => userRole === 'admin' ? updateSongArrangement(song.id, 'has_horn_arrangement', e.target.checked) : null}
+                      className="w-4 h-4 rounded focus:ring-2 focus:ring-green-500 bg-green-600 border-green-700 accent-green-600"
                       style={{
-                        backgroundColor: '#16a34a',
-                        borderColor: '#15803d',
-                        accentColor: '#16a34a'
+                        backgroundColor: '#16a34a !important',
+                        borderColor: '#15803d !important',
+                        accentColor: '#16a34a !important',
+                        opacity: '1 !important',
+                        filter: 'none !important',
+                        pointerEvents: userRole !== 'admin' ? 'none' : 'auto'
                       }}
                     />
                     Horn Arrangement
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={song.has_piano_arrangement || false}
+                      onChange={(e) => userRole === 'admin' ? updateSongArrangement(song.id, 'has_piano_arrangement', e.target.checked) : null}
+                      className="w-4 h-4 rounded focus:ring-2 focus:ring-green-500 bg-green-600 border-green-700 accent-green-600"
+                      style={{
+                        backgroundColor: '#16a34a !important',
+                        borderColor: '#15803d !important',
+                        accentColor: '#16a34a !important',
+                        opacity: '1 !important',
+                        filter: 'none !important',
+                        pointerEvents: userRole !== 'admin' ? 'none' : 'auto'
+                      }}
+                    />
+                    Piano
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={song.has_keys_arrangement || false}
+                      onChange={(e) => userRole === 'admin' ? updateSongArrangement(song.id, 'has_keys_arrangement', e.target.checked) : null}
+                      className="w-4 h-4 rounded focus:ring-2 focus:ring-green-500 bg-green-600 border-green-700 accent-green-600"
+                      style={{
+                        backgroundColor: '#16a34a !important',
+                        borderColor: '#15803d !important',
+                        accentColor: '#16a34a !important',
+                        opacity: '1 !important',
+                        filter: 'none !important',
+                        pointerEvents: userRole !== 'admin' ? 'none' : 'auto'
+                      }}
+                    />
+                    Keys
+                  </label>
+                </div>
+                
+                {/* Tempo and Key fields */}
+                <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-start sm:items-center mt-4">
+                  <label className="flex items-center gap-2 text-sm text-slate-300">
+                    <span className="text-sm font-semibold text-amber-400 min-w-[50px]">Tempo:</span>
+                    <input
+                      type="text"
+                      value={song.tempo || ''}
+                      onChange={(e) => updateSong(song.id, 'tempo', e.target.value)}
+                      readOnly={userRole !== 'admin'}
+                      className={`w-20 sm:w-24 px-2 py-1 text-white rounded border border-slate-600 ${
+                        userRole === 'admin'
+                          ? 'bg-slate-700/50 focus:ring-2 focus:ring-amber-500 focus:border-amber-500'
+                          : 'bg-slate-800/60'
+                      }`}
+                      placeholder="BPM"
+                    />
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-slate-300">
+                    <span className="text-sm font-semibold text-amber-400 min-w-[35px]">Key:</span>
+                    <input
+                      type="text"
+                      value={song.groove || ''}
+                      onChange={(e) => updateSong(song.id, 'groove', e.target.value)}
+                      readOnly={userRole !== 'admin'}
+                      className={`w-20 sm:w-24 px-2 py-1 text-white rounded border border-slate-600 ${
+                        userRole === 'admin'
+                          ? 'bg-slate-700/50 focus:ring-2 focus:ring-amber-500 focus:border-amber-500'
+                          : 'bg-slate-800/60'
+                      }`}
+                      placeholder="C, Am, etc."
+                    />
                   </label>
                 </div>
               </div>
@@ -1925,6 +1940,7 @@ const SongDurationTracker: React.FC<SongDurationTrackerProps> = ({ userRole, onL
         </div>
         </div>
       </div>
+      <RestoreData />
     </div>
   );
 }
